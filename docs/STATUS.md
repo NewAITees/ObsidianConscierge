@@ -1,5 +1,7 @@
 # プロジェクト進捗と次のTODO
 
+> **詳細なTODOリスト**: 実装タスクの詳細は [TODO.md](./TODO.md) を参照してください。
+
 ## 現状サマリ
 - [x] コアの下回り（設定、抽出、埋め込み生成、LLMラッパー、Chromaラッパー、Git差分検知、CLI検索）が揃い、ユニットテストが存在する。
 - [ ] FastAPIアプリやインデックス/同期/レポートの実行フロー、ドキュメント整合性は未実装・未整備。
@@ -15,15 +17,21 @@
 - [x] モデル: `app/models/article.py` に記事/変更検知用データクラスを定義。
 - [x] テスト: `tests/unit/*` に埋め込み、LLM、Chroma、コンテンツ抽出、Git検知、CLI検索のユニットテストを配置（未実行）。
 
-## 未完了/TODO（優先順でチェック可能）
-- [ ] Vault指定の柔軟化を実地確認: GitHubリポジトリ名（owner/repo）またはURLを`.env`で設定し、`resolve_github_repo_url`の挙動を確認・ドキュメントに反映。
-- [ ] systemd雛形の仕上げ: `systemd/`のサービス/タイマーファイルに環境固有のUser/パスを適用し、起動手順をドキュメントに追記。
-- [ ] FastAPIアプリ実装: `app/main.py` とAPIルーターを追加し、ヘルスチェックと検索APIを提供。DI経路を整理（設定→サービス→エンドポイント）。
-- [ ] インデックスパイプライン: `app/core/indexing.py` と `scripts/initial_index.py` を作成し、Git差分→抽出→サマリー/タグ生成→埋め込み→Chroma登録のフローを構築。前回コミットの保存（例: `data/last_commit.txt`）も実装。
-- [ ] 定期ジョブスクリプト: `scripts/git_sync.py` と `scripts/daily_report.py` をPRD準拠で実装し、`pyproject.toml` のエントリポイントと整合させる。
-- [ ] ドキュメント更新: READMEをuv前提に整理し、Poetry記述や未実装の機能説明を修正。`.env.example` と `Settings` の項目齟齬を解消。
-- [ ] テスト拡充: FastAPIエンドポイントの統合テスト、インデックスパイプラインのフロー試験、Chroma/Ollamaをモックしたケースを追加し、カバレッジを80%以上に引き上げる。
-- [ ] 運用/品質: ロギング設定の集中管理、共通リトライ/タイムアウトの導入、ChromaクライアントとEmbeddingモデルのライフサイクル管理（シングルトン化）、バッチ処理・パフォーマンス最適化をPRD要件に合わせて強化。
+## 未完了/TODO（優先順位別）
+
+### 🔴 P0: 最優先（MVP実装に必須）
+- [ ] **FastAPIアプリ実装**: `app/main.py` とAPIルーターを追加し、ヘルスチェックと検索APIを提供。DI経路を整理（設定→サービス→エンドポイント）。
+- [ ] **インデックスパイプライン**: `app/core/indexing.py` と `scripts/initial_index.py` を作成し、Git差分→抽出→サマリー/タグ生成→埋め込み→Chroma登録のフローを構築。前回コミットの保存（例: `data/last_commit.txt`）も実装。
+- [ ] **ドキュメント更新**: READMEをuv前提に整理し、Poetry記述や未実装の機能説明を修正。`.env.example` と `Settings` の項目齟齬を解消。
+
+### 🟠 P1: 高優先度（日常利用に必要）
+- [ ] **定期ジョブスクリプト**: `scripts/git_sync.py` と `scripts/daily_report.py` をPRD準拠で実装し、`pyproject.toml` のエントリポイントと整合させる。
+- [ ] **Vault指定の柔軟化**: GitHubリポジトリ名（owner/repo）またはURLを`.env`で設定し、`resolve_github_repo_url`の挙動を確認・ドキュメントに反映。
+- [ ] **テスト拡充**: FastAPIエンドポイントの統合テスト、インデックスパイプラインのフロー試験、Chroma/Ollamaをモックしたケースを追加し、カバレッジを80%以上に引き上げる。
+
+### 🟡 P2: 中優先度（運用改善）
+- [ ] **systemd雛形の仕上げ**: `systemd/`のサービス/タイマーファイルに環境固有のUser/パスを適用し、起動手順をドキュメントに追記。
+- [ ] **運用/品質**: ロギング設定の集中管理、共通リトライ/タイムアウトの導入、ChromaクライアントとEmbeddingモデルのライフサイクル管理（シングルトン化）、バッチ処理・パフォーマンス最適化をPRD要件に合わせて強化。
 
 ## 補足
 - systemdテンプレート: `systemd/obsidian-conscierge-api.service`（API用）、`systemd/obsidian-conscierge-daily.service` と `systemd/obsidian-conscierge-daily.timer`（デイリーレポート用）の雛形を配置。`YOUR_USER` とパスを環境に合わせて書き換えて使用する。
@@ -31,3 +39,8 @@
 ## ブロッカー/注意点
 - モデルダウンロード（sentence-transformers, Ollamaモデル）が重いため、CIやテストではモック利用を前提にする。
 - `pyproject.toml` に定義されたCLIエントリ（`scripts.initial_index` など）が未実装のままなので、実行時エラーに注意。
+
+## 関連ドキュメント
+- [TODO.md](./TODO.md) - 詳細な実装タスクリスト（優先順位、依存関係、推定工数を含む）
+- [PRD.md](./PRD.md) - プロダクト要件定義書
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - アーキテクチャドキュメント
