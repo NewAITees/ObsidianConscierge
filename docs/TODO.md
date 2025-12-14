@@ -62,22 +62,27 @@
 **目標**: Web UIとAPI基盤を構築し、セマンティック検索を提供
 
 **タスク**:
-- [ ] `app/main.py` の実装
-  - [ ] FastAPIアプリケーションの初期化
-  - [ ] 設定（Settings）のDI（依存性注入）
-  - [ ] サービス層の初期化（EmbeddingService, LLMService, VectorDBService）
-  - [ ] ヘルスチェックエンドポイント (`GET /health`)
-  - [ ] CORS設定（必要に応じて）
-- [ ] `app/api/search.py` の実装
-  - [ ] `GET /api/v1/search` エンドポイント
-  - [ ] クエリパラメータ: `q` (必須), `tags` (オプション), `limit` (デフォルト20), `offset` (デフォルト0)
-  - [ ] レスポンスモデル: `SearchResponse` (Pydantic)
-  - [ ] エラーハンドリング（HTTPException）
-- [ ] `app/api/__init__.py` でルーターを登録
-- [ ] フロントエンド（HTML/JavaScript）の実装（オプション、Phase 1.5）
-  - [ ] 検索UI（シンプルなHTML + Vanilla JS）
-  - [ ] リアルタイム検索（デバウンス300ms）
-  - [ ] 検索結果表示（タイトル、サマリー、類似度、Obsidianで開くボタン）
+- [x] `app/main.py` の実装
+  - [x] FastAPIアプリケーションの初期化
+  - [x] 設定（Settings）のDI（依存性注入）
+  - [x] サービス層の初期化（EmbeddingService, LLMService, VectorDBService）
+  - [x] ヘルスチェックエンドポイント (`GET /health`)
+  - [x] CORS設定（必要に応じて）
+- [x] `app/api/search.py` の実装
+  - [x] `GET /api/v1/search` エンドポイント
+  - [x] クエリパラメータ: `q` (必須), `tags` (オプション), `limit` (デフォルト20), `offset` (デフォルト0)
+  - [x] レスポンスモデル: `SearchResponse` (Pydantic)
+  - [x] エラーハンドリング（HTTPException）
+- [x] `app/api/__init__.py` でルーターを登録
+- [x] `app/models/search.py` の実装（検索リクエスト/レスポンスモデル）
+- [x] **フロントエンド（HTML/JavaScript）の実装** ✅ **完了**
+  - [x] 検索UI（シンプルなHTML + Vanilla JS）
+  - [x] リアルタイム検索（デバウンス300ms）
+  - [x] 検索結果表示（タイトル、サマリー、類似度、Obsidianで開くボタン）
+  - [x] ページネーション（20件/ページ）
+  - [x] レスポンシブデザイン（モバイル対応）
+  - [x] Obsidianで開く機能（`obsidian://open?vault={vault_name}&file={file_path}`）
+  - [x] 設定API（`/api/v1/config`）でVault名を取得
 
 **依存関係**: 
 - `app/core/search.py` (既存)
@@ -95,28 +100,36 @@
 **目標**: Git変更検知からChromaDB格納までの完全なフローを構築
 
 **タスク**:
-- [ ] `app/core/indexing.py` の実装
-  - [ ] `IndexingService` クラスの作成
-  - [ ] `detect_changes()` メソッド: Git差分検知（`app/core/git_sync.py`を活用）
-  - [ ] `process_article()` メソッド: 単一記事の処理フロー
-    - [ ] コンテンツ抽出（`app/core/content_extractor.py`）
-    - [ ] サマリー生成（`app/services/llm_service.py`）
-    - [ ] タグ生成（オプション、`app/services/llm_service.py`）
-    - [ ] 埋め込み生成（`app/services/embedding_service.py`）
-    - [ ] ChromaDB格納（`app/services/vector_db_service.py`）
-  - [ ] `process_batch()` メソッド: バッチ処理（100件ずつ）
-  - [ ] 前回コミットの保存/読み込み（`data/last_commit.txt`）
-- [ ] `scripts/initial_index.py` の実装
-  - [ ] コマンドライン引数パース（`click`使用）
-  - [ ] 全記事の初期インデックス作成
-  - [ ] 進捗表示（`tqdm`使用）
-  - [ ] エラーハンドリングとログ出力
-  - [ ] `pyproject.toml` の `[project.scripts]` と整合（`oc-index`）
-- [ ] `scripts/git_sync.py` の実装（定期実行用）
-  - [ ] Git pull実行（`app/core/git_sync.py`を活用）
-  - [ ] 変更検知とインデックス更新
-  - [ ] ログ出力
-  - [ ] `pyproject.toml` の `[project.scripts]` と整合（`oc-sync`）
+- [x] `app/core/indexing.py` の実装 ✅ **完了**
+  - [x] `IndexingService` クラスの作成
+  - [x] `detect_changes()` メソッド: Git差分検知（`app/core/git_sync.py`を活用）
+  - [x] `process_article()` メソッド: 単一記事の処理フロー
+    - [x] コンテンツ抽出（`app/core/content_extractor.py`）
+    - [x] サマリー生成（`app/services/llm_service.py`）
+    - [x] タグ生成（オプション、`app/services/llm_service.py`）
+    - [x] 埋め込み生成（`app/services/embedding_service.py`）
+    - [x] ChromaDB格納（`app/services/vector_db_service.py`）
+  - [x] `process_batch()` メソッド: バッチ処理（100件ずつ）
+  - [x] 前回コミットの保存/読み込み（`data/last_commit.txt`）
+- [x] `scripts/initial_index.py` の実装 ✅ **完了**
+  - [x] コマンドライン引数パース（`click`使用）
+  - [x] 全記事の初期インデックス作成
+  - [x] 進捗表示（`tqdm`使用）
+  - [x] エラーハンドリングとログ出力
+  - [x] `pyproject.toml` の `[project.scripts]` と整合（`oc-index`）
+- [x] `scripts/git_sync.py` の実装（定期実行用） ✅ **完了**
+  - [x] Git pull実行（`app/core/git_sync.py`を活用）
+  - [x] 変更検知とインデックス更新
+  - [x] ログ出力
+  - [x] `pyproject.toml` の `[project.scripts]` と整合（`oc-sync`）
+- [x] `scripts/git_sync.sh` の実装 ✅ **完了**
+  - [x] Git pull/pushをshスクリプトで実行
+  - [x] `.env`ファイルから設定を読み込み
+  - [x] エラーハンドリング
+- [x] systemd設定ファイル ✅ **完了**
+  - [x] `systemd/obsidian-conscierge-sync.service` - Git同期サービス
+  - [x] `systemd/obsidian-conscierge-sync.timer` - 30分ごとのタイマー
+  - [x] `docs/SYSTEMD_SETUP.md` - セットアップガイド
 
 **依存関係**:
 - `app/core/git_sync.py` (既存)
