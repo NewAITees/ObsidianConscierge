@@ -119,8 +119,8 @@ OBSIDIAN_VAULT_PATH=./TargetObsidianVault
 
 # Ollama設定（ローカルLLMサーバー）
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 OLLAMA_LLM_MODEL=llama3  # or mistral
+# Note: Embeddingsはsentence-transformersを使用（OLLAMA_EMBEDDING_MODELは不要）
 
 # ベクトルDB設定
 CHROMA_DB_PATH=./data/chroma_db
@@ -171,7 +171,8 @@ uv run python scripts/initial_index.py
 このスクリプトは以下を実行します：
 - TargetObsidianVaultから全`.md`ファイルを取得
 - 各ファイルの内容を抽出・クリーニング（既存実装を活用）
-- Ollamaでベクトル化とサマリー生成
+- Ollamaでサマリー生成（テキスト生成用）
+- sentence-transformersでベクトル化（埋め込み生成）
 - ChromaDBへの格納
 
 ### ステップ 5: Web UIの起動
@@ -182,18 +183,19 @@ uv run python scripts/initial_index.py
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-ブラウザで `http://localhost:8000` にアクセスし、検索やデイリーレポートを確認できます。
+ブラウザで `http://localhost:8000` にアクセスし、セマンティック検索UIを利用できます。
+
+**注意**: デイリーレポート機能は現在未実装です（Phase 2で実装予定）。
 
 ### ステップ 6: 自動実行の設定
 
 #### Linux/macOS (cron)
 
 ```bash
-# 毎日午前6時にデイリーレポート生成
-0 6 * * * cd /path/to/ObsidianConscierge && /path/to/uv run python scripts/daily_report.py
-
 # 30分ごとにGit同期
 */30 * * * * cd /path/to/ObsidianConscierge && /path/to/uv run python scripts/git_sync.py
+
+# 注意: デイリーレポート機能は未実装（Phase 2で実装予定）
 ```
 
 #### Windows (Task Scheduler)
@@ -209,61 +211,46 @@ uv run uvicorn app.main:app --reload --port 8000
 
 #### systemd (Linux - 推奨)
 
-`/etc/systemd/system/obsidian-conscierge.service`を作成：
+詳細な設定手順は [docs/SYSTEMD_SETUP.md](docs/SYSTEMD_SETUP.md) を参照してください。
 
-```ini
-[Unit]
-Description=ObsidianConscierge Daily Report
-After=network.target
-
-[Service]
-Type=oneshot
-User=your-username
-WorkingDirectory=/path/to/ObsidianConscierge
-ExecStart=/path/to/uv run python scripts/daily_report.py
-Environment="PATH=/home/your-username/.local/bin:/usr/local/bin:/usr/bin"
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`/etc/systemd/system/obsidian-conscierge.timer`を作成：
-
-```ini
-[Unit]
-Description=ObsidianConscierge Daily Report Timer
-
-[Timer]
-OnCalendar=*-*-* 06:00:00
-
-[Install]
-WantedBy=timers.target
-```
-
-タイマーの有効化と開始：
-
+**Git同期サービス**（30分ごと）:
 ```bash
-sudo systemctl enable obsidian-conscierge.timer
-sudo systemctl start obsidian-conscierge.timer
+sudo cp systemd/obsidian-conscierge-sync.service /etc/systemd/system/
+sudo cp systemd/obsidian-conscierge-sync.timer /etc/systemd/system/
+# ファイルを編集（YOUR_USERとパスを変更）
+sudo systemctl daemon-reload
+sudo systemctl enable obsidian-conscierge-sync.timer
+sudo systemctl start obsidian-conscierge-sync.timer
 ```
+
+**注意**: デイリーレポート機能は未実装（Phase 2で実装予定）
 
 ## 📖 主な機能
 
 ### セマンティック検索
 自然な文章で記事を検索。例：「Pythonでデータ分析をする方法について書いた記事」
 
-### デイリーレポート
-毎朝自動生成されるレポートには以下が含まれます：
+### セマンティック検索（実装済み ✅）
+自然な文章で記事を検索。リアルタイム検索、タグフィルタ、ページネーションに対応。
+
+### デイリーレポート（未実装 ⏳）
+毎朝自動生成されるレポートには以下が含まれる予定：
 - 昨日の執筆統計（記事数、総文字数）
 - 重複検知警告（類似度80%以上）
 - ランダムピックアップ3記事（異分野優先）
 - MOC候補リスト
 
-### ナレッジマップ
+**実装予定**: Phase 2
+
+### ナレッジマップ（未実装 ⏳）
 記事間の関連性を可視化。クラスター分析により、知識の構造を一目で把握できます。
 
-### ブリッジ記事の発見
+**実装予定**: Phase 3
+
+### ブリッジ記事の発見（未実装 ⏳）
 異なるテーマ間をつなぐ「ブリッジ記事」を自動で特定。新しいアイデア創出を支援します。
+
+**実装予定**: Phase 3
 
 詳細な機能仕様については、[要件定義ドキュメント](docs/PRD.md)を参照してください。
 
@@ -275,21 +262,32 @@ sudo systemctl start obsidian-conscierge.timer
 ObsidianConscierge/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPIアプリケーション
+│   ├── main.py              # FastAPIアプリケーション ✅
 │   ├── core/
-│   │   ├── indexing.py      # インデックス作成ロジック
-│   │   ├── search.py        # 検索ロジック
-│   │   └── analysis.py      # 分析ロジック
+│   │   ├── indexing.py      # インデックス作成ロジック ✅
+│   │   ├── search.py        # 検索ロジック ✅
+│   │   └── analysis.py      # 分析ロジック（未実装）
 │   ├── services/
-│   │   ├── github.py        # GitHub API連携
-│   │   ├── llm.py           # LLM API連携
-│   │   └── vector_db.py     # ChromaDB操作
-│   └── api/
-│       ├── search.py        # 検索API
-│       └── reports.py       # レポートAPI
+│   │   ├── embedding_service.py  # Embedding生成 ✅
+│   │   ├── llm_service.py        # LLM API連携 ✅
+│   │   └── vector_db_service.py  # ChromaDB操作 ✅
+│   ├── api/
+│   │   ├── search.py        # 検索API ✅
+│   │   ├── config.py        # 設定API ✅
+│   │   └── reports.py       # レポートAPI（未実装）
+│   ├── models/
+│   │   ├── article.py       # 記事モデル ✅
+│   │   └── search.py       # 検索モデル ✅
+│   └── static/              # フロントエンドUI ✅
+│       ├── index.html
+│       ├── css/
+│       └── js/
 ├── scripts/
-│   ├── initial_index.py     # 初期インデックス作成
-│   └── daily_update.py      # 日次更新処理
+│   ├── initial_index.py     # 初期インデックス作成 ✅
+│   ├── git_sync.py          # Git同期スクリプト ✅
+│   ├── git_sync.sh          # Git同期スクリプト（Bash）✅
+│   ├── search_cli.py        # CLI検索ツール ✅
+│   └── daily_report.py      # デイリーレポート生成（未実装）
 ├── tests/
 │   └── ...
 ├── docs/
@@ -304,25 +302,25 @@ ObsidianConscierge/
 ### 依存関係の追加
 
 ```bash
-poetry add package-name
+uv add package-name
 ```
 
 ### テストの実行
 
 ```bash
-poetry run pytest
+uv run pytest
 ```
 
 ### 型チェック
 
 ```bash
-poetry run mypy app/
+uv run mypy app/
 ```
 
 ### 未使用コードの検出
 
 ```bash
-poetry run vulture app/
+uv run vulture app/
 ```
 
 ## 📝 ライセンス
