@@ -37,8 +37,8 @@ class Settings(BaseSettings):
         description="OllamaサーバーのベースURL",
     )
     ollama_llm_model: str = Field(
-        default="llama3",
-        description="Ollama LLMモデル名（llama3, mistral等）",
+        default="gpt-oss:20b",
+        description="Ollama LLMモデル名（gpt-oss:20b, llama3.1:8b, qwen3:14b等）",
     )
 
     # ベクトルDB設定
@@ -96,6 +96,53 @@ class Settings(BaseSettings):
         description="Git同期間隔（分）",
     )
 
+    # ドキュメント自動編集設定
+    excluded_folders: list[str] = Field(
+        default_factory=lambda: [
+            "01DIARY",           # 日記フォルダ
+            "02TEMPLATES",       # テンプレートフォルダ
+            "06MOC",            # Map of Contents
+            "10KANBAN",         # カンバンボード
+            "11MEDIA",          # メディアファイル
+            "Excalidraw",       # 図形ファイル
+            "Maybe",            # 一時メモ
+            "Omnivore",         # Omnivoreインポート
+            "model_cache",      # モデルキャッシュ
+            "PythonScripts",    # Pythonスクリプト
+            "github",           # GitHub関連
+            ".chroma_db",       # ChromaDBデータ
+            ".claude",          # Claude設定
+            ".devcontainer",    # DevContainer設定
+            ".smtcmp_json_db",  # SMTCMPデータベース
+            ".smtcmp_vector_db",# SMTCMPベクトルDB
+        ],
+        description="自動編集対象外のフォルダリスト",
+    )
+    exclude_root_files: bool = Field(
+        default=True,
+        description="ルートディレクトリのファイルを編集対象外にする",
+    )
+    enable_auto_link_insert: bool = Field(
+        default=True,
+        description="類似リンク自動挿入の有効/無効",
+    )
+    enable_auto_tag_insert: bool = Field(
+        default=True,
+        description="タグ自動挿入の有効/無効",
+    )
+    min_similarity_for_link: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="リンク挿入の最小類似度（0.0-1.0）",
+    )
+    max_similar_links: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="挿入する類似リンクの最大数",
+    )
+
     def get_chroma_db_path(self) -> Path:
         """ChromaDBのパスを取得（存在しない場合は作成）"""
         path = Path(self.chroma_db_path)
@@ -128,4 +175,5 @@ def get_settings() -> Settings:
     if settings is None:
         settings = Settings()
     return settings
+
 
