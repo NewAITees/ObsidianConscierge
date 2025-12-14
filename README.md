@@ -331,6 +331,79 @@ uv run vulture app/
 
 プルリクエストやイシューの報告を歓迎します。詳細は[CONTRIBUTING.md](CONTRIBUTING.md)（作成予定）を参照してください。
 
+## ⚠️ 重要: AI自動ファイル編集について
+
+**【絶対遵守】ObsidianファイルへのAI編集ルール**
+
+ObsidianConsciergeは、類似リンク挿入・タグ自動挿入などの機能で、Vaultのマークダウンファイルを自動編集します。
+**安全性を最優先**するため、以下のルールが厳格に適用されます。
+
+### AI自動生成セクション
+
+各ファイルには、以下のマーカーで明確に区切られた「AI自動生成セクション」が追加される場合があります：
+
+```markdown
+========== AI AUTO-GENERATED SECTION START ==========
+## 🤖 AI自動生成セクション
+
+### 🔗 類似ドキュメント
+- 🔗 [[関連ドキュメント1]] (類似度: 0.850)
+- 📎 [[関連ドキュメント2]] (類似度: 0.720)
+
+### 🏷️ 自動タグ
+#python #ai #machine-learning
+
+最終更新: 2025-01-15 10:30:00
+========== AI AUTO-GENERATED SECTION END ==========
+```
+
+### 🚫 編集の絶対ルール
+
+1. **AI自動生成セクション以外は絶対に変更しません**
+   - 既存の本文、見出し、リンク、手動タグ、フロントマターは一切保護されます
+   - セクション外のコンテンツは読み取り専用として扱われます
+
+2. **セクションが存在しない場合**
+   - ファイル末尾に新規追加のみ行います
+   - 既存コンテンツには一切影響しません
+
+3. **除外フォルダの設定**
+   - `.env`の`EXCLUDED_FOLDERS`で指定したフォルダ内のファイルは編集対象外
+   - ルートディレクトリのファイルも自動的に除外
+   - デフォルト: `01DIARY,02TEMPLATES,06MOC,10KANBAN,11MEDIA,Excalidraw,Maybe,Omnivore,model_cache,PythonScripts,github,.chroma_db,.claude,.devcontainer,.smtcmp_json_db,.smtcmp_vector_db`
+
+### 設定方法
+
+`.env`ファイルで編集動作を制御できます：
+
+```env
+# 類似リンク自動挿入のON/OFF
+ENABLE_AUTO_LINK_INSERT=true
+
+# タグ自動挿入のON/OFF
+ENABLE_AUTO_TAG_INSERT=true
+
+# リンク挿入の最小類似度（0.0-1.0）
+MIN_SIMILARITY_FOR_LINK=0.5
+
+# 挿入する類似リンクの最大数（1-10）
+MAX_SIMILAR_LINKS=3
+
+# 編集対象外のフォルダ（カンマ区切り）
+EXCLUDED_FOLDERS=01DIARY,02TEMPLATES,06MOC,10KANBAN,11MEDIA,Excalidraw,Maybe,Omnivore,model_cache,PythonScripts,github,.chroma_db,.claude,.devcontainer,.smtcmp_json_db,.smtcmp_vector_db
+
+# ルートディレクトリのファイルを編集対象外にする
+EXCLUDE_ROOT_FILES=true
+```
+
+### 安全性の保証
+
+- 専用モジュール `app/core/document_updater.py` がファイル編集を集中管理
+- 厳密なセクション検出により、偶然の誤編集を防止
+- 除外フォルダ機能で重要ファイルを保護
+
+詳細は [docs/TODO.md](docs/TODO.md) の「AI自動ファイル編集ルール」セクションを参照してください。
+
 ## 📚 参考資料
 
 - [Obsidian公式ドキュメント](https://help.obsidian.md/)
