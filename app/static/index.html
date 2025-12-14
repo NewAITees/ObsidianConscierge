@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ObsidianConscierge - セマンティック検索</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 ObsidianConscierge</h1>
+            <p class="subtitle">思考に集中するための、あなたのナレッジベースAIコンシェルジュ</p>
+        </header>
+
+        <main>
+            <div class="search-section">
+                <form id="search-form" class="search-form">
+                    <div class="search-input-wrapper">
+                        <input
+                            type="text"
+                            id="search-query"
+                            name="q"
+                            placeholder="自然な文章で検索...（例: Pythonでデータ分析をする方法）"
+                            autocomplete="off"
+                            required
+                        >
+                        <button type="submit" id="search-button" class="search-button">
+                            <span class="search-icon">🔍</span>
+                            検索
+                        </button>
+                    </div>
+                    <div class="search-options">
+                        <div class="option-group">
+                            <label for="tags-filter">タグフィルタ:</label>
+                            <input
+                                type="text"
+                                id="tags-filter"
+                                name="tags"
+                                placeholder="カンマ区切り（例: python, data-analysis）"
+                            >
+                        </div>
+                        <div class="option-group">
+                            <label for="limit">表示件数:</label>
+                            <select id="limit" name="limit">
+                                <option value="10">10件</option>
+                                <option value="20" selected>20件</option>
+                                <option value="50">50件</option>
+                                <option value="100">100件</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>検索中...</p>
+            </div>
+
+            <div id="error" class="error hidden"></div>
+
+            <div id="results-section" class="results-section hidden">
+                <div class="results-header">
+                    <h2 id="results-title">検索結果</h2>
+                    <div class="pagination-info">
+                        <span id="results-count"></span>
+                    </div>
+                </div>
+                <div id="results-list" class="results-list"></div>
+                <div id="pagination" class="pagination"></div>
+            </div>
+
+            <div id="empty-state" class="empty-state">
+                <p>検索クエリを入力して、記事を検索してください。</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+
