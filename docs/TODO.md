@@ -149,20 +149,20 @@
 **目標**: README、`.env.example`、その他ドキュメントをuv前提に整理
 
 **タスク**:
-- [ ] `README.md` の更新
-  - [ ] Poetry記述をuvに置き換え
-  - [ ] 未実装機能の説明を削除または「未実装」と明記
-  - [ ] クイックスタート手順の確認と修正
-  - [ ] コマンド例を `uv run` に統一
-- [ ] `.env.example` の作成/更新
-  - [ ] 必須項目の確認（`app/core/config.py` の `Settings` と整合）
-  - [ ] オプション項目の追加
-  - [ ] コメントで説明を追加
-  - [ ] Ollama設定の明確化（Embeddingはsentence-transformers使用のため `OLLAMA_EMBEDDING_MODEL` は不要）
-- [ ] `docs/SETUP_GUIDE.md` の更新
-  - [ ] Poetry記述をuvに置き換え
-  - [ ] Ollamaセットアップ手順の明確化
-- [ ] `docs/STATUS.md` の更新（このドキュメント作成後）
+- [x] `README.md` の更新 ✅ **完了**
+  - [x] Poetry記述をuvに置き換え
+  - [x] 未実装機能の説明を削除または「未実装」と明記
+  - [x] クイックスタート手順の確認と修正
+  - [x] コマンド例を `uv run` に統一
+- [x] `.env.example` の作成/更新 ✅ **完了**
+  - [x] 必須項目の確認（`app/core/config.py` の `Settings` と整合）
+  - [x] オプション項目の追加
+  - [x] コメントで説明を追加
+  - [x] Ollama設定の明確化（Embeddingはsentence-transformers使用のため `OLLAMA_EMBEDDING_MODEL` は不要）
+- [x] `docs/SETUP_GUIDE.md` の更新 ✅ **完了**
+  - [x] Poetry記述をuvに置き換え
+  - [x] Ollamaセットアップ手順の明確化
+- [x] `docs/STATUS.md` の更新 ✅ **完了**
 
 **依存関係**: なし（独立タスク）
 
