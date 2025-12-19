@@ -67,9 +67,12 @@ def main(
         # 設定を読み込む
         settings = get_settings()
 
-        # Vaultパスを決定
+        # Vaultパスを決定（絶対パスに解決）
         if vault_path is None:
             vault_path = Path(settings.obsidian_vault_path)
+
+        # 絶対パスに解決（相対パスの場合、現在の作業ディレクトリからの相対パスとして解決）
+        vault_path = vault_path.resolve()
 
         if not vault_path.exists():
             logger.error(f"Vaultパスが存在しません: {vault_path}")

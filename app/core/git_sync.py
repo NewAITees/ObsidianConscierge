@@ -106,3 +106,5 @@ class GitChangeDetector:
         return self.repo.head.commit.hexsha
 
 
+
+

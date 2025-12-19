@@ -42,7 +42,8 @@ class IndexingService:
         self.embedding_service = embedding_service
         self.llm_service = llm_service
         self.content_extractor = content_extractor or ContentExtractor()
-        self.vault_path = Path(self.settings.obsidian_vault_path)
+        # vault_pathを絶対パスに解決（相対パスの場合、現在の作業ディレクトリからの相対パスとして解決）
+        self.vault_path = Path(self.settings.obsidian_vault_path).resolve()
         self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
         self.last_commit_file = self.data_dir / "last_commit.txt"
@@ -81,7 +82,16 @@ class IndexingService:
         try:
             # 絶対パスに変換
             if not file_path.is_absolute():
+                # 相対パスの場合、vault_pathからの相対パスとして扱う
                 file_path = self.vault_path / file_path
+            else:
+                # 絶対パスの場合、vault_pathに含まれているかチェック
+                try:
+                    # vault_pathからの相対パスを取得（vault_pathに含まれている場合）
+                    file_path.relative_to(self.vault_path)
+                except ValueError:
+                    # vault_pathに含まれていない場合は、そのまま使用
+                    pass
 
             # コンテンツ抽出
             content: ArticleContent = self.content_extractor.extract_content(

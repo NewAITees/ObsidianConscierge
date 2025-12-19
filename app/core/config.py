@@ -156,11 +156,47 @@ class Settings(BaseSettings):
         return log_file
 
     def resolve_github_repo_url(self) -> str:
-        """GitHubリポジトリURLを解決する（名前指定を優先）"""
+        """
+        GitHubリポジトリURLを解決する（名前指定を優先）
+
+        Returns:
+            str: GitHubリポジトリURL（https://github.com/owner/repo.git形式）
+
+        Raises:
+            ValueError: 無効な形式または設定が不足している場合
+        """
+        # github_repo_nameが設定されている場合（短縮形式: owner/repo）
         if self.github_repo_name:
-            return f"https://github.com/{self.github_repo_name}.git"
+            # 既にURL形式の場合はそのまま返す
+            if self.github_repo_name.startswith("http://") or self.github_repo_name.startswith(
+                "https://"
+            ):
+                return self.github_repo_name
+            # 短縮形式（owner/repo）をURLに変換
+            if "/" in self.github_repo_name and len(self.github_repo_name.split("/")) == 2:
+                return f"https://github.com/{self.github_repo_name}.git"
+            # 無効な形式
+            msg = f"Invalid github_repo_name format: {self.github_repo_name}. Expected 'owner/repo' or full URL."
+            raise ValueError(msg)
+
+        # github_repo_urlが設定されている場合
         if self.github_repo_url:
-            return self.github_repo_url
+            # 既にURL形式の場合はそのまま返す
+            if self.github_repo_url.startswith("http://") or self.github_repo_url.startswith(
+                "https://"
+            ):
+                # .gitが末尾にない場合は追加
+                if not self.github_repo_url.endswith(".git"):
+                    return f"{self.github_repo_url}.git"
+                return self.github_repo_url
+            # 短縮形式（owner/repo）をURLに変換
+            if "/" in self.github_repo_url and len(self.github_repo_url.split("/")) == 2:
+                return f"https://github.com/{self.github_repo_url}.git"
+            # 無効な形式
+            msg = f"Invalid github_repo_url format: {self.github_repo_url}. Expected 'owner/repo' or full URL."
+            raise ValueError(msg)
+
+        # どちらも設定されていない場合
         msg = "Either github_repo_name or github_repo_url must be set"
         raise ValueError(msg)
 
@@ -175,5 +211,6 @@ def get_settings() -> Settings:
     if settings is None:
         settings = Settings()
     return settings
+
 
 

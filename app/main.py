@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import config, search
+from app.api import config, reports, search
 from app.core.config import Settings, get_settings
 from app.core.search import SearchService
 from app.services.embedding_service import EmbeddingService
@@ -76,6 +76,7 @@ def create_app() -> FastAPI:
 
     # ルーターを登録
     app.include_router(search.router)
+    app.include_router(reports.router)
     app.include_router(config.router)
 
     # 静的ファイルの配信

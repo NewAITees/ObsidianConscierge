@@ -105,7 +105,7 @@ class TagInserter:
             )
 
         # 7. URL（http/https）
-        for match in re.finditer(r"https?://[^\s\)\]\}\'"]+", content):
+        for match in re.finditer(r"https?://[^\s\)\]\}\'\"]+", content):
             positions.append(TextPosition(match.start(), match.end(), "url", 3))
 
         # 8. 既存のタグ

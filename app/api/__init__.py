@@ -1,6 +1,6 @@
 """API endpoints for ObsidianConscierge."""
 
-from app.api import config, search
+from app.api import config, reports, search
 
-__all__ = ["config", "search"]
+__all__ = ["config", "reports", "search"]
 

@@ -150,3 +150,140 @@ class TestIndexingService:
                 # Assert
                 assert loaded_commit == commit_id
 
+    def test_end_to_end_indexing_flow(
+        self, mock_settings: Settings, mock_services: dict
+    ) -> None:
+        """エンドツーエンドのインデックスパイプラインフローのテスト"""
+        # Arrange
+        import tempfile
+        from app.models.article import ArticleContent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault_path = Path(tmpdir) / "vault"
+            vault_path.mkdir()
+            test_file = vault_path / "test.md"
+            test_file.write_text("# テスト記事\n\nこれはテスト記事の本文です。")
+
+            mock_settings.obsidian_vault_path = vault_path
+
+            # モックの設定
+            mock_services["content_extractor"].extract_content.return_value = (
+                ArticleContent(
+                    title="テスト記事",
+                    body="これはテスト記事の本文です。",
+                    metadata={},
+                    file_path=str(test_file),
+                    word_count=20,
+                )
+            )
+            mock_services["llm"].generate_summary.return_value = "テスト記事の要約"
+            mock_services["llm"].generate_tags.return_value = ["test", "python"]
+            mock_services["embedding"].embed.side_effect = [
+                [0.1] * 512,  # body embedding
+                [0.2] * 512,  # summary embedding
+            ]
+            mock_services["vector_db"].store.return_value = True
+
+            with patch("app.core.indexing.get_settings", return_value=mock_settings):
+                service = IndexingService(
+                    vector_db_service=mock_services["vector_db"],
+                    embedding_service=mock_services["embedding"],
+                    llm_service=mock_services["llm"],
+                    content_extractor=mock_services["content_extractor"],
+                    settings=mock_settings,
+                )
+
+                # Act: 記事を処理してインデックスに追加
+                article = service.process_article(test_file)
+                assert article is not None
+
+                # 記事をインデックスに追加
+                success_count = service.index_articles([article])
+
+                # Assert
+                assert success_count == 1
+                # モックが正しく呼ばれたことを確認
+                mock_services["content_extractor"].extract_content.assert_called_once()
+                mock_services["llm"].generate_summary.assert_called_once()
+                mock_services["llm"].generate_tags.assert_called_once()
+                assert mock_services["embedding"].embed.call_count == 2  # body + summary
+                mock_services["vector_db"].store.assert_called_once()
+
+    def test_batch_processing(
+        self, mock_settings: Settings, mock_services: dict
+    ) -> None:
+        """バッチ処理のテスト"""
+        # Arrange
+        import tempfile
+        from app.models.article import ArticleContent
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault_path = Path(tmpdir) / "vault"
+            vault_path.mkdir()
+
+            # 複数のテストファイルを作成
+            test_files = []
+            for i in range(3):
+                test_file = vault_path / f"test{i}.md"
+                test_file.write_text(f"# テスト記事{i}\n\n本文{i}")
+                test_files.append(test_file)
+
+            mock_settings.obsidian_vault_path = vault_path
+
+            # モックの設定（複数回呼ばれることを想定）
+            def extract_content_side_effect(file_path: Path) -> ArticleContent:
+                return ArticleContent(
+                    title=f"テスト記事{test_files.index(file_path)}",
+                    body=f"本文{test_files.index(file_path)}",
+                    metadata={},
+                    file_path=str(file_path),
+                    word_count=10,
+                )
+
+            mock_services["content_extractor"].extract_content.side_effect = (
+                extract_content_side_effect
+            )
+            mock_services["llm"].generate_summary.return_value = "テストサマリー"
+            mock_services["llm"].generate_tags.return_value = ["test"]
+            mock_services["embedding"].embed.return_value = [0.1] * 512
+            mock_services["vector_db"].store.return_value = True
+
+            with patch("app.core.indexing.get_settings", return_value=mock_settings):
+                service = IndexingService(
+                    vector_db_service=mock_services["vector_db"],
+                    embedding_service=mock_services["embedding"],
+                    llm_service=mock_services["llm"],
+                    content_extractor=mock_services["content_extractor"],
+                    settings=mock_settings,
+                )
+
+                # Act: バッチ処理
+                articles = service.process_batch(test_files, batch_size=2)
+
+                # Assert
+                assert len(articles) == 3
+                assert mock_services["content_extractor"].extract_content.call_count == 3
+                assert mock_services["llm"].generate_summary.call_count == 3
+
+    def test_delete_articles(self, mock_settings: Settings, mock_services: dict) -> None:
+        """記事削除のテスト"""
+        # Arrange
+        mock_services["vector_db"].delete.return_value = True
+
+        with patch("app.core.indexing.get_settings", return_value=mock_settings):
+            service = IndexingService(
+                vector_db_service=mock_services["vector_db"],
+                embedding_service=mock_services["embedding"],
+                llm_service=mock_services["llm"],
+                content_extractor=mock_services["content_extractor"],
+                settings=mock_settings,
+            )
+
+            # Act
+            file_paths = ["test/article1.md", "test/article2.md"]
+            success_count = service.delete_articles(file_paths)
+
+            # Assert
+            assert success_count == 2
+            assert mock_services["vector_db"].delete.call_count == 2
+

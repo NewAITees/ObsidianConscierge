@@ -194,3 +194,337 @@ class VectorDBService:
             bool: 更新成功時True
         """
         return self.store(article)
+
+    def get_all_articles(self) -> list[dict[str, Any]]:
+        """
+        ChromaDBから全記事を取得する
+
+        Returns:
+            List[Dict[str, Any]]: 全記事のリスト（id, title, summary, tags, file_path, modified, created, word_count, body_embeddingを含む）
+        """
+        try:
+            # ChromaDBから全件取得（where句なしで全件取得）
+            results = self.collection.get(
+                include=["documents", "metadatas", "embeddings"],
+            )
+
+            articles: list[dict[str, Any]] = []
+            if results["ids"]:
+                for i in range(len(results["ids"])):
+                    doc_id = results["ids"][i]
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+                    document = results["documents"][i] if results["documents"] else ""
+                    embedding = (
+                        results["embeddings"][i] if results["embeddings"] else None
+                    )
+
+                    # タグをリストに変換
+                    tags_str = metadata.get("tags", "")
+                    tags = tags_str.split(",") if tags_str else []
+
+                    articles.append(
+                        {
+                            "id": doc_id,
+                            "title": metadata.get("title", ""),
+                            "summary": metadata.get("summary", ""),
+                            "tags": tags,
+                            "file_path": metadata.get("file_path", ""),
+                            "modified": metadata.get("modified"),
+                            "created": metadata.get("created"),
+                            "word_count": metadata.get("word_count", 0),
+                            "body": document,
+                            "body_embedding": embedding,
+                        }
+                    )
+
+            return articles
+        except Exception:
+            return []
+
+    def search_by_tags(
+        self, tags: list[str], limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """
+        タグで検索する
+
+        Args:
+            tags: 検索対象のタグリスト
+            limit: 取得件数
+
+        Returns:
+            List[Dict[str, Any]]: 検索結果のリスト
+        """
+        try:
+            if not tags:
+                return []
+
+            # 最初のタグでフィルタ（ChromaDBの制約により単一条件のみ）
+            where = {"tags": {"$contains": tags[0]}}
+
+            results = self.collection.get(
+                where=where,
+                limit=limit,
+                include=["documents", "metadatas"],
+            )
+
+            search_results: list[dict[str, Any]] = []
+            if results["ids"]:
+                for i in range(len(results["ids"])):
+                    doc_id = results["ids"][i]
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+
+                    # 他のタグでもフィルタリング（複数タグ対応）
+                    tags_str = metadata.get("tags", "")
+                    doc_tags = tags_str.split(",") if tags_str else []
+
+                    # すべてのタグが含まれているかチェック
+                    if all(tag in doc_tags for tag in tags):
+                        search_results.append(
+                            {
+                                "id": doc_id,
+                                "title": metadata.get("title", ""),
+                                "summary": metadata.get("summary", ""),
+                                "tags": doc_tags,
+                                "file_path": metadata.get("file_path", ""),
+                                "modified": metadata.get("modified"),
+                                "word_count": metadata.get("word_count", 0),
+                            }
+                        )
+
+            return search_results
+        except Exception:
+            return []
+
+    def search_by_keyword(
+        self, keyword: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """
+        キーワードで検索する（タイトルまたは本文に含まれるもの）
+
+        Args:
+            keyword: 検索キーワード
+            limit: 取得件数
+
+        Returns:
+            List[Dict[str, Any]]: 検索結果のリスト
+        """
+        try:
+            # ChromaDBから全件取得して、キーワードでフィルタリング
+            results = self.collection.get(
+                include=["documents", "metadatas"],
+            )
+
+            search_results: list[dict[str, Any]] = []
+            if results["ids"]:
+                for i in range(len(results["ids"])):
+                    doc_id = results["ids"][i]
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+                    document = results["documents"][i] if results["documents"] else ""
+
+                    # タイトルまたは本文にキーワードが含まれているかチェック
+                    title = metadata.get("title", "")
+                    if keyword.lower() in title.lower() or keyword.lower() in document.lower():
+                        tags_str = metadata.get("tags", "")
+                        tags = tags_str.split(",") if tags_str else []
+
+                        search_results.append(
+                            {
+                                "id": doc_id,
+                                "title": title,
+                                "summary": metadata.get("summary", ""),
+                                "tags": tags,
+                                "file_path": metadata.get("file_path", ""),
+                                "modified": metadata.get("modified"),
+                                "word_count": metadata.get("word_count", 0),
+                            }
+                        )
+
+                        if len(search_results) >= limit:
+                            break
+
+            return search_results
+        except Exception:
+            return []
+
+    def search_by_date_range(
+        self,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """
+        日付範囲で検索する
+
+        Args:
+            from_date: 開始日（ISO形式、例: 2024-01-01）
+            to_date: 終了日（ISO形式、例: 2024-12-31）
+            limit: 取得件数
+
+        Returns:
+            List[Dict[str, Any]]: 検索結果のリスト
+        """
+        try:
+            # ChromaDBから全件取得して、日付でフィルタリング
+            results = self.collection.get(
+                include=["documents", "metadatas"],
+            )
+
+            search_results: list[dict[str, Any]] = []
+            if results["ids"]:
+                for i in range(len(results["ids"])):
+                    doc_id = results["ids"][i]
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+                    modified = metadata.get("modified")
+
+                    # 日付範囲チェック
+                    if modified:
+                        if from_date and modified < from_date:
+                            continue
+                        if to_date and modified > to_date:
+                            continue
+
+                        tags_str = metadata.get("tags", "")
+                        tags = tags_str.split(",") if tags_str else []
+
+                        search_results.append(
+                            {
+                                "id": doc_id,
+                                "title": metadata.get("title", ""),
+                                "summary": metadata.get("summary", ""),
+                                "tags": tags,
+                                "file_path": metadata.get("file_path", ""),
+                                "modified": modified,
+                                "word_count": metadata.get("word_count", 0),
+                            }
+                        )
+
+                        if len(search_results) >= limit:
+                            break
+
+            return search_results
+        except Exception:
+            return []
+
+    def search_by_word_count(
+        self,
+        min_words: int | None = None,
+        max_words: int | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """
+        文字数範囲で検索する
+
+        Args:
+            min_words: 最小文字数
+            max_words: 最大文字数
+            limit: 取得件数
+
+        Returns:
+            List[Dict[str, Any]]: 検索結果のリスト
+        """
+        try:
+            # ChromaDBから全件取得して、文字数でフィルタリング
+            results = self.collection.get(
+                include=["documents", "metadatas"],
+            )
+
+            search_results: list[dict[str, Any]] = []
+            if results["ids"]:
+                for i in range(len(results["ids"])):
+                    doc_id = results["ids"][i]
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+                    word_count = metadata.get("word_count", 0)
+
+                    # 文字数範囲チェック
+                    if min_words is not None and word_count < min_words:
+                        continue
+                    if max_words is not None and word_count > max_words:
+                        continue
+
+                    tags_str = metadata.get("tags", "")
+                    tags = tags_str.split(",") if tags_str else []
+
+                    search_results.append(
+                        {
+                            "id": doc_id,
+                            "title": metadata.get("title", ""),
+                            "summary": metadata.get("summary", ""),
+                            "tags": tags,
+                            "file_path": metadata.get("file_path", ""),
+                            "modified": metadata.get("modified"),
+                            "word_count": word_count,
+                        }
+                    )
+
+                    if len(search_results) >= limit:
+                        break
+
+            return search_results
+        except Exception:
+            return []
+
+    def get_similar_documents(
+        self, doc_id: str, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """
+        指定されたドキュメントに類似したドキュメントを検索する
+
+        Args:
+            doc_id: 基準となるドキュメントのID
+            limit: 取得件数
+
+        Returns:
+            List[Dict[str, Any]]: 類似ドキュメントのリスト
+        """
+        try:
+            # 指定されたドキュメントを取得
+            results = self.collection.get(
+                ids=[doc_id],
+                include=["embeddings"],
+            )
+
+            if not results["ids"] or not results["embeddings"]:
+                return []
+
+            # ドキュメントのベクトルを使って類似検索
+            embedding = results["embeddings"][0]
+            similar_results = self.collection.query(
+                query_embeddings=[embedding],
+                n_results=limit + 1,  # 自分自身も含まれるため+1
+                include=["documents", "distances", "metadatas"],
+            )
+
+            # 結果を整形（自分自身を除外）
+            search_results: list[dict[str, Any]] = []
+            if similar_results["ids"] and similar_results["ids"][0]:
+                for i in range(len(similar_results["ids"][0])):
+                    result_id = similar_results["ids"][0][i]
+
+                    # 自分自身は除外
+                    if result_id == doc_id:
+                        continue
+
+                    metadata = similar_results["metadatas"][0][i]
+                    distance = similar_results["distances"][0][i]
+
+                    # 距離を類似度に変換
+                    similarity = max(0.0, 1.0 - (distance / 2.0))
+
+                    tags_str = metadata.get("tags", "")
+                    tags = tags_str.split(",") if tags_str else []
+
+                    search_results.append(
+                        {
+                            "id": result_id,
+                            "title": metadata.get("title", ""),
+                            "summary": metadata.get("summary", ""),
+                            "similarity": similarity,
+                            "tags": tags,
+                            "file_path": metadata.get("file_path", ""),
+                            "modified": metadata.get("modified"),
+                        }
+                    )
+
+            return search_results
+        except Exception:
+            return []
