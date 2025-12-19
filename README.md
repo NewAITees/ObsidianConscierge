@@ -227,11 +227,40 @@ sudo systemctl start obsidian-conscierge-sync.timer
 
 ## 📖 主な機能
 
-### セマンティック検索
-自然な文章で記事を検索。例：「Pythonでデータ分析をする方法について書いた記事」
+### 検索機能（実装済み ✅）
 
-### セマンティック検索（実装済み ✅）
+ObsidianConsciergeでは、以下の7種類の検索方法を提供しています：
+
+#### 1. セマンティック検索
 自然な文章で記事を検索。リアルタイム検索、タグフィルタ、ページネーションに対応。
+
+**Web UI**: `http://localhost:8000` で利用可能
+
+**CLI使用例:**
+```bash
+# セマンティック検索（既存）
+uv run python scripts/search_cli.py semantic -q "Python"
+
+# タグ検索
+uv run python scripts/search_cli.py tags -t python -t fastapi
+
+# キーワード検索
+uv run python scripts/search_cli.py keyword -k "ObsidianConscierge"
+
+# 日付範囲検索
+uv run python scripts/search_cli.py date --from 2024-01-01 --to 2024-12-31
+
+# 文字数範囲検索
+uv run python scripts/search_cli.py wordcount --min 100 --max 1000
+
+# ハイブリッド検索
+uv run python scripts/search_cli.py hybrid -q "Python" -t coding --min-words 500
+
+# 類似ドキュメント検索
+uv run python scripts/search_cli.py similar --doc-id "path/to/article.md"
+```
+
+詳細は [docs/SEARCH_METHODS.md](docs/SEARCH_METHODS.md) を参照してください。
 
 ### デイリーレポート（未実装 ⏳）
 毎朝自動生成されるレポートには以下が含まれる予定：
