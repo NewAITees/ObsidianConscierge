@@ -7,8 +7,10 @@
 - [x] FastAPIアプリとインデックスパイプラインが実装済み ✅
 - [x] フロントエンドUI（検索UI）が実装済み ✅
 - [x] Git同期スクリプトとsystemd設定が実装済み ✅
-- [ ] デイリーレポート機能は未実装（Phase 2で実装予定）
-- [ ] ドキュメント整合性は整備済み ✅
+- [x] デイリーレポート機能が実装済み（Phase 2.1完了） ✅
+- [x] Vault指定の柔軟化が実装済み（Phase 2.2完了） ✅
+- [x] ドキュメント整合性は整備済み ✅
+- [ ] テストカバレッジ: 現在59%（目標80%）
 
 ## 完了済み（実装/テスト済み）
 
@@ -33,6 +35,29 @@
 - [x] `docs/SETUP_GUIDE.md` の更新 - Poetry→uv、Ollamaセットアップ手順
 - [x] `docs/STATUS.md` の更新 - Phase 1完了を反映
 
+### Phase 2.1: デイリーレポート機能 ✅
+- [x] 分析サービス: `app/core/analysis.py` - 重複検知、MOC候補抽出、ランダムピックアップ、執筆統計
+- [x] レポートAPI: `app/api/reports.py` - `GET /api/v1/reports/daily/{date}` エンドポイント
+- [x] レポートモデル: `app/models/report.py` - DailyReportResponse、WritingStatistics等
+- [x] デイリーレポートスクリプト: `scripts/daily_report.py` - Markdown/HTML形式でのレポート生成
+- [x] CLIエントリ: `pyproject.toml` に `oc-report` を追加
+- [x] 統合テスト: `tests/integration/test_api_reports.py` - 全7テスト通過
+- [x] ユニットテスト: `tests/unit/test_analysis.py` - 全25テスト通過
+
+### Phase 2.2: Vault指定の柔軟化 ✅
+- [x] `app/core/config.py` の `resolve_github_repo_url()` メソッド実装
+  - [x] `GITHUB_REPO_NAME`（owner/repo形式）のサポート
+  - [x] `GITHUB_REPO_URL`（完全URL形式）のサポート
+  - [x] 両形式の自動変換とバリデーション
+- [x] `.env.example` に両形式の例を追加
+- [x] `docs/SETUP_GUIDE.md` に設定方法を記載
+
+### Phase 2.3: テスト拡充 ⏳
+- [x] Git変更検知のエラーハンドリング改善
+- [x] 統合テストの修正（実際のGitリポジトリを使用）
+- [x] 全71テスト通過 ✅
+- [ ] カバレッジ80%以上（現在59%）
+
 ### コア機能（既存）
 - [x] 設定管理: `app/core/config.py` で`.env`を読むPydantic Settingsを用意。
 - [x] コンテンツ抽出/クリーニング: `app/core/content_extractor.py` でFrontmatterパース、タイトル抽出、Markdownクリーニングを実装。
@@ -53,9 +78,9 @@
 
 ### 🟠 P1: 高優先度（日常利用に必要）
 - [x] **Git同期スクリプト**: `scripts/git_sync.py` と `scripts/git_sync.sh` を実装 ✅
-- [ ] **デイリーレポートスクリプト**: `scripts/daily_report.py` をPRD準拠で実装（Phase 2で実装予定）
-- [ ] **Vault指定の柔軟化**: GitHubリポジトリ名（owner/repo）またはURLを`.env`で設定し、`resolve_github_repo_url`の挙動を確認・ドキュメントに反映。
-- [ ] **テスト拡充**: カバレッジを80%以上に引き上げる（現在43%）
+- [x] **デイリーレポートスクリプト**: `scripts/daily_report.py` をPRD準拠で実装 ✅
+- [x] **Vault指定の柔軟化**: GitHubリポジトリ名（owner/repo）またはURLを`.env`で設定し、`resolve_github_repo_url`の挙動を確認・ドキュメントに反映。 ✅
+- [ ] **テスト拡充**: カバレッジを80%以上に引き上げる（現在59%、目標80%）
 
 ### 🟡 P2: 中優先度（運用改善）
 - [x] **systemd雛形の仕上げ**: `systemd/obsidian-conscierge-sync.service`, `.timer` を作成、`docs/SYSTEMD_SETUP.md` に起動手順を追記 ✅
@@ -70,8 +95,7 @@
 
 ## ブロッカー/注意点
 - モデルダウンロード（sentence-transformers, Ollamaモデル）が重いため、CIやテストではモック利用を前提にする。
-- `pyproject.toml` に定義されたCLIエントリ（`oc-index`, `oc-sync`, `oc-search`）は実装済み ✅
-- `oc-report`（デイリーレポート）は未実装（Phase 2で実装予定）
+- `pyproject.toml` に定義されたCLIエントリ（`oc-index`, `oc-sync`, `oc-search`, `oc-report`）は実装済み ✅
 
 ## 関連ドキュメント
 - [TODO.md](./TODO.md) - 詳細な実装タスクリスト（優先順位、依存関係、推定工数を含む）
