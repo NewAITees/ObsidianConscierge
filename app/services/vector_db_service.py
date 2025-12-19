@@ -204,8 +204,9 @@ class VectorDBService:
         """
         try:
             # ChromaDBから全件取得（where句なしで全件取得）
+            # embeddingsは大きいので、必要に応じてのみ取得
             results = self.collection.get(
-                include=["documents", "metadatas", "embeddings"],
+                include=["documents", "metadatas"],
             )
 
             articles: list[dict[str, Any]] = []
@@ -214,13 +215,12 @@ class VectorDBService:
                     doc_id = results["ids"][i]
                     metadata = results["metadatas"][i] if results["metadatas"] else {}
                     document = results["documents"][i] if results["documents"] else ""
-                    embedding = (
-                        results["embeddings"][i] if results["embeddings"] else None
-                    )
 
                     # タグをリストに変換
                     tags_str = metadata.get("tags", "")
                     tags = tags_str.split(",") if tags_str else []
+                    # 空文字列を除去
+                    tags = [tag.strip() for tag in tags if tag.strip()]
 
                     articles.append(
                         {
@@ -233,12 +233,14 @@ class VectorDBService:
                             "created": metadata.get("created"),
                             "word_count": metadata.get("word_count", 0),
                             "body": document,
-                            "body_embedding": embedding,
                         }
                     )
 
             return articles
-        except Exception:
+        except Exception as exc:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"get_all_articles() failed: {exc}")
             return []
 
     def search_by_tags(
