@@ -101,10 +101,25 @@ class TestIndexingService:
 
             # Gitリポジトリを初期化
             repo = Repo.init(vault_path)
+            
+            # 初期コミットを作成（READMEファイルを追加）
+            readme_file = vault_path / "README.md"
+            readme_file.write_text("# Vault")
+            repo.index.add([str(readme_file)])
+            repo.index.commit("Initial commit")
+            initial_commit = repo.head.commit.hexsha
+            
+            # テストファイルを追加してコミット
             test_file = vault_path / "test.md"
             test_file.write_text("# Test")
             repo.index.add([str(test_file)])
-            repo.index.commit("Initial commit")
+            repo.index.commit("Add test file")
+            
+            # 2つ目のファイルを追加してコミット
+            test_file2 = vault_path / "test2.md"
+            test_file2.write_text("# Test 2")
+            repo.index.add([str(test_file2)])
+            repo.index.commit("Add test file 2")
 
             mock_settings.obsidian_vault_path = vault_path
 
@@ -117,11 +132,13 @@ class TestIndexingService:
                     settings=mock_settings,
                 )
 
-                # Act
-                changes = service.detect_changes()
+                # Act: 初期コミット以降の変更を検知
+                changes = service.detect_changes(since_commit=initial_commit)
 
                 # Assert
                 assert isinstance(changes, list)
+                # 2つのファイルが追加されているはず
+                assert len(changes) >= 2
 
     def test_save_and_load_last_commit(
         self, mock_settings: Settings, mock_services: dict

@@ -52,47 +52,68 @@ class GitChangeDetector:
         """
         changes: list[FileChange] = []
 
+        # リポジトリが空の場合は空のリストを返す
+        try:
+            if not self.repo.heads:
+                return changes
+        except Exception:
+            return changes
+
         # コミットを取得
-        if since_commit:
-            # 指定されたコミット以降を検索
-            commits = self.repo.iter_commits(f"{since_commit}..HEAD")
-        else:
-            # 全コミットを検索
-            commits = self.repo.iter_commits()
+        try:
+            if since_commit:
+                # 指定されたコミット以降を検索
+                # コミットが存在するか確認
+                try:
+                    self.repo.commit(since_commit)
+                    commits = self.repo.iter_commits(f"{since_commit}..HEAD")
+                except Exception:
+                    # コミットが存在しない場合は全コミットを検索
+                    commits = self.repo.iter_commits()
+            else:
+                # 全コミットを検索
+                commits = self.repo.iter_commits()
+        except Exception:
+            # エラーが発生した場合は空のリストを返す
+            return changes
 
         for commit in commits:
-            # 親コミットとの差分を取得
-            if commit.parents:
-                # 親コミットがある場合
-                parent = commit.parents[0]
-                diffs = commit.diff(parent)
-            else:
-                # 初回コミットの場合
-                diffs = commit.diff(None)
+            try:
+                # 親コミットとの差分を取得
+                if commit.parents:
+                    # 親コミットがある場合
+                    parent = commit.parents[0]
+                    diffs = commit.diff(parent)
+                else:
+                    # 初回コミットの場合
+                    diffs = commit.diff(None)
 
-            for diff in diffs:
-                # Markdownファイルのみを対象
-                file_path = diff.b_path if diff.b_path else diff.a_path
-                if not file_path.endswith(".md"):
-                    continue
+                for diff in diffs:
+                    # Markdownファイルのみを対象
+                    file_path = diff.b_path if diff.b_path else diff.a_path
+                    if not file_path or not file_path.endswith(".md"):
+                        continue
 
-                # 変更タイプをマッピング
-                change_type_map = {
-                    "A": "added",  # Added
-                    "M": "modified",  # Modified
-                    "D": "deleted",  # Deleted
-                    "R": "modified",  # Renamed (modifiedとして扱う)
-                }
+                    # 変更タイプをマッピング
+                    change_type_map = {
+                        "A": "added",  # Added
+                        "M": "modified",  # Modified
+                        "D": "deleted",  # Deleted
+                        "R": "modified",  # Renamed (modifiedとして扱う)
+                    }
 
-                change_type = change_type_map.get(diff.change_type, "modified")
+                    change_type = change_type_map.get(diff.change_type, "modified")
 
-                changes.append(
-                    FileChange(
-                        file_path=file_path,
-                        change_type=change_type,
-                        commit_id=commit.hexsha,
+                    changes.append(
+                        FileChange(
+                            file_path=file_path,
+                            change_type=change_type,
+                            commit_id=commit.hexsha,
+                        )
                     )
-                )
+            except Exception:
+                # 個別のコミット処理でエラーが発生した場合はスキップ
+                continue
 
         return changes
 
@@ -102,8 +123,16 @@ class GitChangeDetector:
 
         Returns:
             str: 最新のコミットID
+
+        Raises:
+            ValueError: リポジトリが空の場合
         """
-        return self.repo.head.commit.hexsha
+        try:
+            if not self.repo.heads:
+                raise ValueError("Repository has no commits")
+            return self.repo.head.commit.hexsha
+        except Exception as exc:
+            raise ValueError(f"Failed to get latest commit ID: {exc}") from exc
 
 
 
