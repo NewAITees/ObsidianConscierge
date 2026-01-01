@@ -53,6 +53,7 @@ coverage.xml
 htmlcov/
 .tox/
 .hypothesis/
+tests/**/__pycache__/
 
 # OS
 .DS_Store
@@ -62,3 +63,4 @@ Thumbs.db
 TargetObsidianVault/
 reports/
 sample_code/
+systemd/
