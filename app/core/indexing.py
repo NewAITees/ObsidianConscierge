@@ -1,8 +1,13 @@
 """Indexing pipeline for processing articles."""
 
+import json
 import logging
+import subprocess
+import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from subprocess import TimeoutExpired
 from typing import Any
 
 from app.core.config import Settings, get_settings
@@ -14,6 +19,21 @@ from app.services.llm_service import LLMService
 from app.services.vector_db_service import VectorDBService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _PreparedArticle:
+    """埋め込み生成前の準備済み記事データ"""
+
+    id: str
+    title: str
+    body: str
+    summary: str
+    tags: list[str]
+    created: datetime | None
+    modified: datetime | None
+    file_path: str
+    word_count: int
 
 
 class IndexingService:
@@ -80,64 +100,18 @@ class IndexingService:
             Article: 処理されたArticleオブジェクト。処理に失敗した場合はNone
         """
         try:
-            # 絶対パスに変換（パス重複を防ぐ）
-            if not file_path.is_absolute():
-                # 相対パスの場合、vault_pathからの相対パスとして扱う
-                file_path = self.vault_path / file_path
+            prepared = self._prepare_article(file_path)
+            if prepared is None:
+                return None
 
-            # ファイルの存在確認
-            if not file_path.exists():
-                raise FileNotFoundError(f"File not found: {file_path}")
+            body_embedding = self.embedding_service.embed(prepared.body)
+            summary_embedding = self.embedding_service.embed(prepared.summary)
 
-            # コンテンツ抽出
-            content: ArticleContent = self.content_extractor.extract_content(
-                file_path
-            )
-
-            # サマリー生成
-            summary = self.llm_service.generate_summary(content.body)
-
-            # タグ生成（既存タグがある場合は統合）
-            existing_tags = content.metadata.get("tags", [])
-            if isinstance(existing_tags, str):
-                existing_tags = [existing_tags]
-            elif not isinstance(existing_tags, list):
-                existing_tags = []
-
-            tags = self.llm_service.generate_tags(
-                content.body, existing_tags=existing_tags
-            ) if self.settings.enable_auto_tagging else existing_tags
-
-            # 埋め込み生成
-            body_embedding = self.embedding_service.embed(content.body)
-            summary_embedding = self.embedding_service.embed(summary)
-
-            # 日時を取得
-            created = self._parse_datetime(content.metadata.get("created"))
-            modified = self._parse_datetime(
-                content.metadata.get("modified")
-            ) or datetime.now()
-
-            # 相対パスを取得
-            relative_path = file_path.relative_to(self.vault_path)
-            article_id = str(relative_path).replace("\\", "/")
-
-            # Articleオブジェクトを作成
-            article = Article(
-                id=article_id,
-                title=content.title,
-                body=content.body,
-                summary=summary,
-                tags=tags,
-                created=created,
-                modified=modified,
-                file_path=article_id,
+            return self._build_article(
+                prepared,
                 body_embedding=body_embedding,
                 summary_embedding=summary_embedding,
-                word_count=content.word_count,
             )
-
-            return article
 
         except Exception as exc:
             logger.error(f"記事の処理に失敗しました: {file_path}, エラー: {exc}")
@@ -162,12 +136,111 @@ class IndexingService:
             batch = file_paths[i : i + batch_size]
             logger.info(f"バッチ処理: {i + 1}-{min(i + batch_size, len(file_paths))}/{len(file_paths)}")
 
+            prepared_batch: list[_PreparedArticle] = []
             for file_path in batch:
-                article = self.process_article(file_path)
-                if article:
-                    articles.append(article)
+                prepared = self._prepare_article(file_path)
+                if prepared is not None:
+                    prepared_batch.append(prepared)
+
+            if not prepared_batch:
+                continue
+
+            bodies = [prepared.body for prepared in prepared_batch]
+            summaries = [prepared.summary for prepared in prepared_batch]
+
+            body_embeddings = self.embed_batch_with_worker(bodies)
+            summary_embeddings = self.embed_batch_with_worker(summaries)
+
+            for prepared, body_embedding, summary_embedding in zip(
+                prepared_batch, body_embeddings, summary_embeddings, strict=True
+            ):
+                articles.append(
+                    self._build_article(
+                        prepared,
+                        body_embedding=body_embedding,
+                        summary_embedding=summary_embedding,
+                    )
+                )
 
         return articles
+
+    def _prepare_article(self, file_path: Path) -> "_PreparedArticle | None":
+        """
+        記事のメタ情報と本文を準備する（埋め込み生成は行わない）
+
+        Args:
+            file_path: 処理対象のファイルパス（相対パスまたは絶対パス）
+
+        Returns:
+            _PreparedArticle | None: 準備済みデータ。失敗時はNone。
+        """
+        try:
+            # 絶対パスに変換（パス重複を防ぐ）
+            if not file_path.is_absolute():
+                file_path = self.vault_path / file_path
+
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+
+            content: ArticleContent = self.content_extractor.extract_content(file_path)
+
+            summary = self.llm_service.generate_summary(content.body)
+
+            existing_tags = content.metadata.get("tags", [])
+            if isinstance(existing_tags, str):
+                existing_tags = [existing_tags]
+            elif not isinstance(existing_tags, list):
+                existing_tags = []
+
+            tags = (
+                self.llm_service.generate_tags(content.body, existing_tags=existing_tags)
+                if self.settings.enable_auto_tagging
+                else existing_tags
+            )
+
+            created = self._parse_datetime(content.metadata.get("created"))
+            modified = self._parse_datetime(content.metadata.get("modified")) or datetime.now()
+
+            relative_path = file_path.relative_to(self.vault_path)
+            article_id = str(relative_path).replace("\\", "/")
+
+            return _PreparedArticle(
+                id=article_id,
+                title=content.title,
+                body=content.body,
+                summary=summary,
+                tags=tags,
+                created=created,
+                modified=modified,
+                file_path=article_id,
+                word_count=content.word_count,
+            )
+        except Exception as exc:
+            logger.error(f"記事の処理に失敗しました: {file_path}, エラー: {exc}")
+            return None
+
+    def _build_article(
+        self,
+        prepared: "_PreparedArticle",
+        body_embedding: list[float],
+        summary_embedding: list[float],
+    ) -> Article:
+        """
+        準備済みデータと埋め込みからArticleを構築する。
+        """
+        return Article(
+            id=prepared.id,
+            title=prepared.title,
+            body=prepared.body,
+            summary=prepared.summary,
+            tags=prepared.tags,
+            created=prepared.created,
+            modified=prepared.modified,
+            file_path=prepared.file_path,
+            body_embedding=body_embedding,
+            summary_embedding=summary_embedding,
+            word_count=prepared.word_count,
+        )
 
     def index_articles(self, articles: list[Article]) -> int:
         """
@@ -289,3 +362,94 @@ class IndexingService:
 
         return None
 
+    def embed_batch_with_worker(
+        self, texts: list[str], timeout: int = 1800
+    ) -> list[list[float]]:
+        """
+        ワーカープロセス経由でバッチembeddingを実行（より堅牢）
+
+        別プロセスでembedding処理を実行することで、ハング時でも
+        親プロセスから強制終了してGPUリソースを確実に解放できる。
+
+        Args:
+            texts: 埋め込みを生成するテキストのリスト
+            timeout: タイムアウト秒数（デフォルト: 30分）
+
+        Returns:
+            List[List[float]]: 埋め込みベクトルのリスト
+
+        Raises:
+            TimeoutExpired: タイムアウトした場合
+            RuntimeError: ワーカープロセスがエラーを返した場合
+        """
+        worker_script = Path(__file__).parent.parent.parent / "scripts" / "embedding_worker.py"
+
+        if not worker_script.exists():
+            logger.warning(
+                f"Embedding worker script not found: {worker_script}, falling back to direct call"
+            )
+            # フォールバック: 直接呼び出し
+            return self.embedding_service.embed_batch(texts)
+
+        # 入力データをJSON化
+        input_data = {"texts": texts}
+        input_json = json.dumps(input_data)
+
+        logger.info(f"Starting embedding worker process (timeout: {timeout}s)")
+
+        proc: subprocess.Popen[str] | None = None
+
+        try:
+            # ワーカープロセスを起動
+            proc = subprocess.Popen(
+                [sys.executable, str(worker_script)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            # タイムアウト付きで実行
+            stdout, stderr = proc.communicate(input=input_json, timeout=timeout)
+
+            # ワーカーのログ出力（stderr）を記録
+            if stderr:
+                logger.debug(f"Worker stderr: {stderr}")
+
+            if not stdout.strip():
+                raise RuntimeError(
+                    f"Worker returned empty output (rc={proc.returncode}): {stderr.strip()}"
+                )
+
+            # 結果をパース
+            result = json.loads(stdout)
+
+            if result.get("status") == "error":
+                error_msg = result.get("error", "Unknown error")
+                error_type = result.get("type", "UnknownError")
+                raise RuntimeError(f"Worker process failed ({error_type}): {error_msg}")
+
+            embeddings = result.get("embeddings", [])
+            logger.info(f"Successfully received {len(embeddings)} embeddings from worker")
+
+            return embeddings
+
+        except TimeoutExpired:
+            logger.error(f"Embedding worker timed out after {timeout}s, killing process")
+            if proc is not None:
+                proc.kill()
+                proc.wait()  # zombie回避
+            raise
+
+        except json.JSONDecodeError as exc:
+            logger.error(f"Failed to parse worker output: {exc}")
+            logger.error(f"Worker stdout: {stdout}")
+            raise RuntimeError(f"Invalid worker output: {exc}") from exc
+
+        except Exception as exc:
+            logger.error(f"Embedding worker failed: {exc}")
+            # プロセスがまだ動いている場合は終了
+            if proc is not None and proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            raise
