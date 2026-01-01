@@ -61,6 +61,7 @@ Thumbs.db
 
 # Project specific
 TargetObsidianVault/
+targetobsidianvault/
 reports/
 sample_code/
 systemd/
