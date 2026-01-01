@@ -46,6 +46,8 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
         uv run python scripts/git_sync.py
         uv run python scripts/git_sync.py --use-sh-script
     """
+    embedding_service = None
+
     try:
         # 設定を読み込む
         settings = get_settings()
@@ -114,10 +116,10 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
 
         logger.info(f"検出された変更: {len(changes)}件")
 
-        # サービスを初期化
+        # サービスを初期化（GPUはまだ使用しない）
         logger.info("サービスを初期化中...")
         vector_db_service = VectorDBService(db_path=settings.get_chroma_db_path())
-        embedding_service = EmbeddingService()
+        embedding_service = EmbeddingService()  # GPUロードは embed() 呼び出し時に遅延実行
         llm_service = LLMService(
             base_url=settings.ollama_base_url,
             model=settings.ollama_llm_model,
@@ -169,6 +171,12 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
     except Exception as exc:
         logger.error(f"エラーが発生しました: {exc}", exc_info=True)
         sys.exit(1)
+    finally:
+        # 必ずGPUリソースを解放
+        if embedding_service is not None:
+            logger.info("GPUリソースをクリーンアップ中...")
+            embedding_service.cleanup()
+            logger.info("クリーンアップ完了")
 
 
 if __name__ == "__main__":
