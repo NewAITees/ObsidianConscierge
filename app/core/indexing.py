@@ -80,18 +80,14 @@ class IndexingService:
             Article: 処理されたArticleオブジェクト。処理に失敗した場合はNone
         """
         try:
-            # 絶対パスに変換
+            # 絶対パスに変換（パス重複を防ぐ）
             if not file_path.is_absolute():
                 # 相対パスの場合、vault_pathからの相対パスとして扱う
                 file_path = self.vault_path / file_path
-            else:
-                # 絶対パスの場合、vault_pathに含まれているかチェック
-                try:
-                    # vault_pathからの相対パスを取得（vault_pathに含まれている場合）
-                    file_path.relative_to(self.vault_path)
-                except ValueError:
-                    # vault_pathに含まれていない場合は、そのまま使用
-                    pass
+
+            # ファイルの存在確認
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
 
             # コンテンツ抽出
             content: ArticleContent = self.content_extractor.extract_content(
@@ -258,7 +254,7 @@ class IndexingService:
         日時文字列をdatetimeオブジェクトに変換する
 
         Args:
-            value: 日時文字列またはdatetimeオブジェクト
+            value: 日時文字列、datetimeオブジェクト、またはdateオブジェクト
 
         Returns:
             datetime | None: 変換されたdatetimeオブジェクト（変換できない場合はNone）
@@ -266,15 +262,30 @@ class IndexingService:
         if value is None:
             return None
 
+        # datetime.datetimeオブジェクトの場合
         if isinstance(value, datetime):
             return value
 
+        # datetime.dateオブジェクトの場合（Frontmatterが自動変換する可能性あり）
+        # dateをdatetimeに変換（時刻は00:00:00）
+        from datetime import date
+        if isinstance(value, date):
+            return datetime.combine(value, datetime.min.time())
+
+        # 文字列の場合
         if isinstance(value, str):
             # ISO形式の日時文字列をパース
             try:
                 return datetime.fromisoformat(value.replace("Z", "+00:00"))
             except ValueError:
                 pass
+
+        # その他の型の場合は文字列に変換してパースを試みる
+        try:
+            value_str = str(value)
+            return datetime.fromisoformat(value_str.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            pass
 
         return None
 

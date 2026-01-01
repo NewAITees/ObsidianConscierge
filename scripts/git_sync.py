@@ -49,7 +49,8 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
     try:
         # 設定を読み込む
         settings = get_settings()
-        vault_path = Path(settings.obsidian_vault_path)
+        # vault_pathを絶対パスに解決（パス重複バグを防ぐ）
+        vault_path = Path(settings.obsidian_vault_path).resolve()
 
         if not vault_path.exists():
             logger.error(f"Vaultパスが存在しません: {vault_path}")

@@ -29,6 +29,7 @@ class LLMService:
         self.model = model
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self._client = ollama.Client(host=self.base_url)
 
     def generate_summary(self, content: str, max_length: int = 200) -> str:
         """
@@ -110,7 +111,7 @@ class LLMService:
 
         for attempt in range(self.max_retries):
             try:
-                response = ollama.generate(
+                response = self._client.generate(
                     model=self.model,
                     prompt=prompt,
                 )
@@ -126,4 +127,3 @@ class LLMService:
         if last_error:
             raise last_error
         raise RuntimeError("Unexpected error in _generate_with_retry")
-
