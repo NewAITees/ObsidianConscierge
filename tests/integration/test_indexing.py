@@ -262,7 +262,6 @@ class TestIndexingService:
             )
             mock_services["llm"].generate_summary.return_value = "テストサマリー"
             mock_services["llm"].generate_tags.return_value = ["test"]
-            mock_services["embedding"].embed.return_value = [0.1] * 512
             mock_services["vector_db"].store.return_value = True
 
             with patch("app.core.indexing.get_settings", return_value=mock_settings):
@@ -275,12 +274,23 @@ class TestIndexingService:
                 )
 
                 # Act: バッチ処理
-                articles = service.process_batch(test_files, batch_size=2)
+                with patch.object(
+                    service,
+                    "embed_batch_with_worker",
+                    side_effect=[
+                        [[0.1] * 512] * 2,  # body embeddings (batch 1)
+                        [[0.2] * 512] * 2,  # summary embeddings (batch 1)
+                        [[0.1] * 512] * 1,  # body embeddings (batch 2)
+                        [[0.2] * 512] * 1,  # summary embeddings (batch 2)
+                    ],
+                ) as embed_batch_mock:
+                    articles = service.process_batch(test_files, batch_size=2)
 
                 # Assert
                 assert len(articles) == 3
                 assert mock_services["content_extractor"].extract_content.call_count == 3
                 assert mock_services["llm"].generate_summary.call_count == 3
+                assert embed_batch_mock.call_count == 4
 
     def test_delete_articles(self, mock_settings: Settings, mock_services: dict) -> None:
         """記事削除のテスト"""
@@ -304,3 +314,27 @@ class TestIndexingService:
             assert success_count == 2
             assert mock_services["vector_db"].delete.call_count == 2
 
+    def test_embed_batch_with_worker_fallback(
+        self, mock_settings: Settings, mock_services: dict
+    ) -> None:
+        """ワーカースクリプト未存在時のフォールバックテスト"""
+        # Arrange
+        mock_services["embedding"].embed_batch.return_value = [[0.1] * 512]
+
+        with patch("app.core.indexing.get_settings", return_value=mock_settings), patch(
+            "app.core.indexing.Path.exists", return_value=False
+        ):
+            service = IndexingService(
+                vector_db_service=mock_services["vector_db"],
+                embedding_service=mock_services["embedding"],
+                llm_service=mock_services["llm"],
+                content_extractor=mock_services["content_extractor"],
+                settings=mock_settings,
+            )
+
+            # Act
+            embeddings = service.embed_batch_with_worker(["test"])
+
+            # Assert
+            assert embeddings == [[0.1] * 512]
+            mock_services["embedding"].embed_batch.assert_called_once_with(["test"])
