@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import config, reports, search
+from app.api import atomic, config, moc, pipeline, reports, search
 from app.core.config import Settings, get_settings
 from app.core.search import SearchService
 from app.services.embedding_service import EmbeddingService
@@ -78,6 +78,9 @@ def create_app() -> FastAPI:
     app.include_router(search.router)
     app.include_router(reports.router)
     app.include_router(config.router)
+    app.include_router(atomic.router)
+    app.include_router(moc.router)
+    app.include_router(pipeline.router)
 
     # 静的ファイルの配信
     static_dir = Path(__file__).parent / "static"
@@ -130,4 +133,3 @@ except Exception as exc:
         exc,
     )
     app = None  # type: ignore[assignment]
-

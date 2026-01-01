@@ -69,6 +69,28 @@ class AnalysisService:
         self.vector_db_service = vector_db_service
         self.settings = settings or get_settings()
 
+    def _get_category_from_path(self, file_path: str) -> str | None:
+        """ファイルパスからカテゴリを取得する（パイプラインフォルダは除外）。
+
+        Args:
+            file_path: 対象ファイルのパス
+
+        Returns:
+            str | None: カテゴリ名（該当なしの場合はNone）
+        """
+        if not file_path:
+            return None
+
+        path_parts = Path(file_path).parts
+        if len(path_parts) <= 1:
+            return None
+
+        category = path_parts[0]
+        if category in self.settings.pipeline_folders:
+            return None
+
+        return category
+
     def detect_duplicates(
         self, threshold: float | None = None
     ) -> list[dict[str, Any]]:
@@ -176,16 +198,12 @@ class AnalysisService:
             category_groups: dict[str, list[dict[str, Any]]] = {}
             for article in articles:
                 file_path = article.get("file_path", "")
-                if not file_path:
+                category = self._get_category_from_path(file_path)
+                if not category:
                     continue
-
-                # ファイルパスからカテゴリ（最初のフォルダ）を抽出
-                path_parts = Path(file_path).parts
-                if len(path_parts) > 1:
-                    category = path_parts[0]
-                    if category not in category_groups:
-                        category_groups[category] = []
-                    category_groups[category].append(article)
+                if category not in category_groups:
+                    category_groups[category] = []
+                category_groups[category].append(article)
 
             # MOC候補を構築
             candidates: list[dict[str, Any]] = []
@@ -269,15 +287,14 @@ class AnalysisService:
                         uncategorized.append(article)
                         continue
 
-                    # ファイルパスからカテゴリ（最初のフォルダ）を抽出
-                    path_parts = Path(file_path).parts
-                    if len(path_parts) > 1:
-                        category = path_parts[0]
-                        if category not in category_groups:
-                            category_groups[category] = []
-                        category_groups[category].append(article)
-                    else:
+                    category = self._get_category_from_path(file_path)
+                    if not category:
                         uncategorized.append(article)
+                        continue
+
+                    if category not in category_groups:
+                        category_groups[category] = []
+                    category_groups[category].append(article)
 
                 # 各カテゴリから1件ずつ選択
                 pickups: list[dict[str, Any]] = []
@@ -452,4 +469,3 @@ class AnalysisService:
                 "total_word_count": 0,
                 "total_articles": 0,
             }
-

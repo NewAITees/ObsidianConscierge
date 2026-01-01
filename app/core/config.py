@@ -62,6 +62,15 @@ class Settings(BaseSettings):
         default=True,
         description="タグ自動生成のON/OFF",
     )
+    pipeline_folders: list[str] = Field(
+        default_factory=lambda: [
+            "00_Raw",
+            "01_Summary",
+            "02_Atomic",
+            "03_MOC",
+        ],
+        description="アトミック運用のパイプライン用フォルダ（カテゴリ判定から除外）",
+    )
 
     # ログ設定
     log_level: str = Field(
@@ -211,6 +220,5 @@ def get_settings() -> Settings:
     if settings is None:
         settings = Settings()
     return settings
-
 
 
