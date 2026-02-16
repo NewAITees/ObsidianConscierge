@@ -66,6 +66,54 @@ def mock_vector_db_service() -> MagicMock:
             "body": "カテゴリ記事の本文",
             "body_embedding": [0.3] * 512,
         },
+        {
+            "id": "04CODING/mcp1.md",
+            "title": "MCP入門",
+            "summary": "MCPの概要",
+            "tags": ["MCP", "2025-01-10"],
+            "file_path": "04CODING/mcp1.md",
+            "modified": (datetime.now() - timedelta(days=1)).isoformat(),
+            "created": (datetime.now() - timedelta(days=5)).isoformat(),
+            "word_count": 120,
+            "body": "MCP本文1",
+            "body_embedding": [0.25] * 512,
+        },
+        {
+            "id": "04CODING/mcp2.md",
+            "title": "MCP実装",
+            "summary": "MCPの実装",
+            "tags": ["MCP"],
+            "file_path": "04CODING/mcp2.md",
+            "modified": (datetime.now() - timedelta(days=1)).isoformat(),
+            "created": (datetime.now() - timedelta(days=6)).isoformat(),
+            "word_count": 130,
+            "body": "MCP本文2",
+            "body_embedding": [0.26] * 512,
+        },
+        {
+            "id": "05MATH/mcp3.md",
+            "title": "MCP応用",
+            "summary": "MCPの応用",
+            "tags": ["MCP"],
+            "file_path": "05MATH/mcp3.md",
+            "modified": (datetime.now() - timedelta(days=2)).isoformat(),
+            "created": (datetime.now() - timedelta(days=7)).isoformat(),
+            "word_count": 110,
+            "body": "MCP本文3",
+            "body_embedding": [0.27] * 512,
+        },
+        {
+            "id": "01DIARY/2025-01-10.md",
+            "title": "前後リンク：[[DiaryMOC_2025]]",
+            "summary": "日記テンプレ",
+            "tags": ["MCP", "2025-01-10"],
+            "file_path": "01DIARY/2025-01-10.md",
+            "modified": (datetime.now() - timedelta(days=1)).isoformat(),
+            "created": (datetime.now() - timedelta(days=1)).isoformat(),
+            "word_count": 50,
+            "body": "日記本文",
+            "body_embedding": [0.28] * 512,
+        },
     ]
     return service
 
@@ -76,8 +124,6 @@ def client(
     mock_vector_db_service: MagicMock,
 ) -> TestClient:
     """テスト用のFastAPIクライアントを返す"""
-    from app.core.analysis import AnalysisService
-
     with patch("app.main.get_settings", return_value=mock_settings), patch(
         "app.services.vector_db_service.VectorDBService",
         return_value=mock_vector_db_service,
@@ -211,3 +257,18 @@ class TestReportsAPI:
             assert "articles" in candidate
             assert "count" in candidate
 
+    def test_daily_report_moc_candidates_exclude_noise(self, client: TestClient) -> None:
+        """MOC候補から日付タグ・日記テンプレノイズが除外されることを確認."""
+        date_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        response = client.get(f"/api/v1/reports/daily/{date_str}")
+
+        assert response.status_code == 200
+        moc_candidates = response.json()["moc_candidates"]
+        candidate_names = {candidate["name"] for candidate in moc_candidates}
+
+        assert "MCP" in candidate_names
+        assert "2025-01-10" not in candidate_names
+        for candidate in moc_candidates:
+            for article in candidate["articles"]:
+                assert "01DIARY/" not in article["file_path"]
+                assert "前後リンク" not in article["title"]

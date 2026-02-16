@@ -76,6 +76,27 @@ class Settings(BaseSettings):
         ],
         description="アトミック運用のパイプライン用フォルダ（カテゴリ判定から除外）",
     )
+    moc_candidate_top_n: int = Field(
+        default=30,
+        ge=1,
+        description="MOC候補として返却する上位件数",
+    )
+    moc_exclude_paths: list[str] = Field(
+        default_factory=lambda: ["01DIARY/", "06MOC/", "03_MOC/"],
+        description="MOC候補抽出時に除外するパス部分一致ルール",
+    )
+    moc_exclude_title_keywords: list[str] = Field(
+        default_factory=lambda: ["前後リンク"],
+        description="MOC候補抽出時に除外するタイトルキーワード",
+    )
+    moc_exclude_date_tags: bool = Field(
+        default=True,
+        description="MOC候補抽出時に日付タグ（YYYY-MM-DD）を除外する",
+    )
+    moc_exclude_tags: list[str] = Field(
+        default_factory=list,
+        description="MOC候補抽出時に除外するタグ名（完全一致）",
+    )
 
     # ログ設定
     log_level: str = Field(

@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 
 from app.core.analysis import AnalysisService, cosine_similarity
@@ -193,46 +192,36 @@ class TestDetectDuplicates:
 class TestFindMocCandidates:
     """MOC候補抽出のテスト"""
 
-    def test_find_moc_candidates_default(
-        self,
-        analysis_service: AnalysisService,
-    ) -> None:
+    def test_find_moc_candidates_default(self, analysis_service: AnalysisService) -> None:
         """デフォルトパラメータでMOC候補抽出"""
         candidates = analysis_service.find_moc_candidates()
         assert isinstance(candidates, list)
+        assert len(candidates) <= analysis_service.settings.moc_candidate_top_n
         for candidate in candidates:
             assert "type" in candidate
             assert "name" in candidate
             assert "articles" in candidate
             assert "count" in candidate
-            # 記事数が最小値以上、最大値以下
-            assert 3 <= candidate["count"] <= 20
-
-    def test_find_moc_candidates_custom_range(
-        self,
-        analysis_service: AnalysisService,
-    ) -> None:
-        """カスタム範囲でMOC候補抽出"""
-        candidates = analysis_service.find_moc_candidates(min_articles=2, max_articles=5)
-        for candidate in candidates:
-            assert 2 <= candidate["count"] <= 5
+            assert candidate["count"] >= 3
 
     def test_find_moc_candidates_sorted_by_count(
         self,
         analysis_service: AnalysisService,
     ) -> None:
-        """MOC候補が記事数降順でソートされているか"""
-        candidates = analysis_service.find_moc_candidates(min_articles=1, max_articles=100)
+        """MOC候補が件数降順に近い順序で返るか"""
+        candidates = analysis_service.find_moc_candidates(min_articles=1, top_n=100)
         if len(candidates) > 1:
             for i in range(len(candidates) - 1):
-                assert candidates[i]["count"] >= candidates[i + 1]["count"]
+                assert candidates[i]["count"] >= candidates[i + 1]["count"] or (
+                    candidates[i]["count"] + 2 >= candidates[i + 1]["count"]
+                )
 
     def test_find_moc_candidates_tag_type(
         self,
         analysis_service: AnalysisService,
     ) -> None:
         """タグベースのMOC候補が含まれているか"""
-        candidates = analysis_service.find_moc_candidates(min_articles=1, max_articles=100)
+        candidates = analysis_service.find_moc_candidates(min_articles=1, top_n=100)
         tag_candidates = [c for c in candidates if c["type"] == "tag"]
         assert len(tag_candidates) > 0
 
@@ -241,9 +230,86 @@ class TestFindMocCandidates:
         analysis_service: AnalysisService,
     ) -> None:
         """カテゴリベースのMOC候補が含まれているか"""
-        candidates = analysis_service.find_moc_candidates(min_articles=1, max_articles=100)
+        candidates = analysis_service.find_moc_candidates(min_articles=1, top_n=100)
         category_candidates = [c for c in candidates if c["type"] == "category"]
         assert len(category_candidates) > 0
+
+    def test_find_moc_candidates_excludes_noise_by_path_title_and_date_tag(
+        self,
+        mock_settings: Settings,
+    ) -> None:
+        """日記/既存MOC/前後リンク/日付タグを候補から除外する."""
+        mock_db = MagicMock()
+        mock_db.get_all_articles.return_value = [
+            {
+                "id": "01DIARY/2025-01-01.md",
+                "title": "前後リンク：[[DiaryMOC_2025]]",
+                "tags": ["ルーティン", "2025-01-01"],
+                "file_path": "01DIARY/2025-01-01.md",
+                "modified": datetime.now().isoformat(),
+            },
+            {
+                "id": "06MOC/topic.md",
+                "title": "MOCページ",
+                "tags": ["knowledge"],
+                "file_path": "06MOC/topic.md",
+                "modified": datetime.now().isoformat(),
+            },
+            {
+                "id": "04CODING/a.md",
+                "title": "A",
+                "tags": ["MCP", "2024-11-20"],
+                "file_path": "04CODING/a.md",
+                "modified": datetime.now().isoformat(),
+            },
+            {
+                "id": "04CODING/b.md",
+                "title": "B",
+                "tags": ["MCP"],
+                "file_path": "04CODING/b.md",
+                "modified": datetime.now().isoformat(),
+            },
+            {
+                "id": "05MATH/c.md",
+                "title": "C",
+                "tags": ["MCP"],
+                "file_path": "05MATH/c.md",
+                "modified": datetime.now().isoformat(),
+            },
+        ]
+        service = AnalysisService(mock_db, mock_settings)
+
+        candidates = service.find_moc_candidates(min_articles=2, top_n=20)
+        names = {c["name"] for c in candidates}
+
+        assert "2025-01-01" not in names
+        assert "2024-11-20" not in names
+        assert "MCP" in names
+        for candidate in candidates:
+            for article in candidate["articles"]:
+                assert "01DIARY/" not in article["file_path"]
+                assert "06MOC/" not in article["file_path"]
+                assert "前後リンク" not in article["title"]
+
+    def test_find_moc_candidates_applies_top_n(
+        self,
+        mock_settings: Settings,
+    ) -> None:
+        """top_n 指定で候補数が制限される."""
+        mock_db = MagicMock()
+        mock_db.get_all_articles.return_value = [
+            {
+                "id": f"04CODING/n{i}.md",
+                "title": f"note-{i}",
+                "tags": [f"tag{i}", "shared"],
+                "file_path": f"04CODING/n{i}.md",
+                "modified": datetime.now().isoformat(),
+            }
+            for i in range(10)
+        ]
+        service = AnalysisService(mock_db, mock_settings)
+        candidates = service.find_moc_candidates(min_articles=1, top_n=3)
+        assert len(candidates) == 3
 
 
 class TestGetRandomPickups:

@@ -5,9 +5,8 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.core.analysis import AnalysisService
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.models.report import DailyReportResponse
-from app.services.vector_db_service import VectorDBService
 
 router = APIRouter(prefix="/api/v1", tags=["reports"])
 
@@ -73,9 +72,7 @@ async def get_daily_report(
         )
 
         # MOC候補
-        moc_candidates = analysis_service.find_moc_candidates(
-            min_articles=3, max_articles=20
-        )
+        moc_candidates = analysis_service.find_moc_candidates(min_articles=3)
 
         # レスポンスを作成
         response = DailyReportResponse.from_analysis(
@@ -126,4 +123,3 @@ async def get_yesterday_report(
         duplicate_threshold=duplicate_threshold,
         analysis_service=analysis_service,
     )
-

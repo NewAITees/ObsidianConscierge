@@ -7,15 +7,15 @@
 
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
-from datetime import datetime
 
-from app.core.config import Settings
 from app.core.analysis import AnalysisService, cosine_similarity
+from app.core.config import Settings
 from app.services.embedding_service import EmbeddingService
-from app.services.vector_db_service import VectorDBService
 from app.services.llm_service import LLMService
+from app.services.vector_db_service import VectorDBService
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ class MOCGenerator:
             # MOC 候補を取得（AnalysisService を使用）
             candidates = self.analysis_service.find_moc_candidates(
                 min_articles=min_notes,
-                max_articles=50
+                top_n=max_mocs * 5,
             )
 
             if not candidates:

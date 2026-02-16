@@ -175,12 +175,12 @@ def format_html_report(
     # 執筆統計
     html_lines.append("    <h2>📊 執筆統計</h2>")
     html_lines.append("    <div class='stats'>")
-    html_lines.append(f"        <ul>")
+    html_lines.append("        <ul>")
     html_lines.append(f"            <li><strong>新規記事数</strong>: {stats['new_count']}件</li>")
     html_lines.append(f"            <li><strong>更新記事数</strong>: {stats['updated_count']}件</li>")
     html_lines.append(f"            <li><strong>総文字数</strong>: {stats['total_word_count']:,}文字</li>")
     html_lines.append(f"            <li><strong>総記事数</strong>: {stats['total_articles']}件</li>")
-    html_lines.append(f"        </ul>")
+    html_lines.append("        </ul>")
     html_lines.append("    </div>")
 
     # 重複検知警告
@@ -193,10 +193,10 @@ def format_html_report(
             article2 = dup["article2"]
             similarity = dup["similarity"]
             html_lines.append(f"        <h3>{i}. 類似度: {similarity:.1%}</h3>")
-            html_lines.append(f"        <ul>")
+            html_lines.append("        <ul>")
             html_lines.append(f"            <li><strong>{article1['title']}</strong> (<code>{article1['file_path']}</code>)</li>")
             html_lines.append(f"            <li><strong>{article2['title']}</strong> (<code>{article2['file_path']}</code>)</li>")
-            html_lines.append(f"        </ul>")
+            html_lines.append("        </ul>")
         if len(duplicates) > 10:
             html_lines.append(f"        <p><em>他 {len(duplicates) - 10}組の重複ペアがあります</em></p>")
         html_lines.append("    </div>")
@@ -329,7 +329,7 @@ def main(
 
     # MOC候補
     click.echo("  - MOC候補を抽出中...")
-    moc_candidates = analysis_service.find_moc_candidates(min_articles=3, max_articles=20)
+    moc_candidates = analysis_service.find_moc_candidates(min_articles=3)
 
     # 出力ディレクトリを作成
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -368,4 +368,3 @@ def main(
 
 if __name__ == "__main__":
     main()
-

@@ -77,6 +77,8 @@ def client(mock_settings: Settings, monkeypatch: pytest.MonkeyPatch) -> TestClie
     monkeypatch.setattr("app.main.get_settings", lambda: mock_settings)
     monkeypatch.setattr("app.core.config.get_settings", lambda: mock_settings)
     monkeypatch.setattr("app.api.atomic.get_settings", lambda: mock_settings)
+    monkeypatch.setattr("app.api.moc.get_settings", lambda: mock_settings)
+    monkeypatch.setattr("app.api.pipeline.get_settings", lambda: mock_settings)
     monkeypatch.setattr("app.core.atomic_splitter.Settings", lambda **kwargs: mock_settings)
     monkeypatch.setattr("app.core.atomic_scorer.Settings", lambda **kwargs: mock_settings)
     monkeypatch.setattr("app.core.moc_generator.Settings", lambda **kwargs: mock_settings)

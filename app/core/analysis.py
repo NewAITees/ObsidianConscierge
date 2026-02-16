@@ -2,6 +2,7 @@
 
 import logging
 import random
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from app.core.config import Settings, get_settings
 from app.services.vector_db_service import VectorDBService
 
 logger = logging.getLogger(__name__)
+DATE_TAG_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
@@ -160,8 +162,145 @@ class AnalysisService:
             logger.error(f"重複検知に失敗しました: {exc}")
             return []
 
+    def _matches_excluded_path(self, file_path: str) -> bool:
+        """MOC候補から除外すべきパスかどうかを判定する."""
+        if not file_path:
+            return True
+
+        normalized_file_path = file_path.replace("\\", "/")
+        for excluded_path in self.settings.moc_exclude_paths:
+            normalized_excluded = excluded_path.replace("\\", "/").strip()
+            if not normalized_excluded:
+                continue
+            if normalized_excluded in normalized_file_path:
+                return True
+
+        return False
+
+    def _matches_excluded_title(self, title: str) -> bool:
+        """MOC候補から除外すべきタイトルかどうかを判定する."""
+        if not title:
+            return True
+
+        lower_title = title.lower()
+        for keyword in self.settings.moc_exclude_title_keywords:
+            if keyword and keyword.lower() in lower_title:
+                return True
+
+        return False
+
+    def _is_excluded_tag(self, tag: str) -> bool:
+        """MOC候補から除外すべきタグかどうかを判定する."""
+        if not tag:
+            return True
+
+        normalized_tag = str(tag).strip()
+        if not normalized_tag:
+            return True
+
+        if self.settings.moc_exclude_date_tags and DATE_TAG_PATTERN.fullmatch(normalized_tag):
+            return True
+
+        excluded_tags = {t.lower().strip() for t in self.settings.moc_exclude_tags if t.strip()}
+        return normalized_tag.lower() in excluded_tags
+
+    def _get_modified_datetime(self, article: dict[str, Any]) -> datetime | None:
+        """記事の更新日時をdatetimeで取得する."""
+        modified = article.get("modified")
+        if not modified:
+            return None
+
+        try:
+            if isinstance(modified, datetime):
+                return modified
+            if isinstance(modified, str):
+                return datetime.fromisoformat(modified.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+        return None
+
+    def _calculate_candidate_score(
+        self,
+        candidate_type: str,
+        candidate_name: str,
+        group_articles: list[dict[str, Any]],
+    ) -> float:
+        """MOC候補のスコアを計算する."""
+        count = len(group_articles)
+        if count == 0:
+            return 0.0
+
+        category_set: set[str] = set()
+        recent_count = 0
+        noise_count = 0
+        recent_threshold = datetime.now() - timedelta(days=180)
+
+        for article in group_articles:
+            file_path = str(article.get("file_path", ""))
+            title = str(article.get("title", ""))
+            category = self._get_category_from_path(file_path)
+            if category:
+                category_set.add(category)
+
+            modified_at = self._get_modified_datetime(article)
+            if modified_at and modified_at >= recent_threshold:
+                recent_count += 1
+
+            if self._matches_excluded_path(file_path) or self._matches_excluded_title(title):
+                noise_count += 1
+
+        # タグ候補側でのみ、タグ名自体のノイズもペナルティ対象にする
+        if candidate_type == "tag" and self._is_excluded_tag(candidate_name):
+            noise_count += count
+
+        diversity_ratio = len(category_set) / count
+        recency_ratio = recent_count / count
+        noise_ratio = noise_count / count
+
+        base_score = float(count)
+        bonus = (diversity_ratio * 3.0) + (recency_ratio * 2.0)
+        penalty = noise_ratio * 2.0
+        return base_score + bonus - penalty
+
+    def _article_to_candidate_item(self, article: dict[str, Any]) -> dict[str, str]:
+        """候補内の記事表示用の辞書に変換する."""
+        return {
+            "id": str(article.get("id", "")),
+            "title": str(article.get("title", "")),
+            "file_path": str(article.get("file_path", "")),
+        }
+
+    def _build_candidates_from_groups(
+        self,
+        candidate_type: str,
+        groups: dict[str, list[dict[str, Any]]],
+        min_articles: int,
+    ) -> list[dict[str, Any]]:
+        """グループ化済み記事から候補を構築する."""
+        candidates: list[dict[str, Any]] = []
+
+        for name, group_articles in groups.items():
+            if len(group_articles) < min_articles:
+                continue
+
+            score = self._calculate_candidate_score(candidate_type, name, group_articles)
+            candidates.append(
+                {
+                    "type": candidate_type,
+                    "name": name,
+                    "articles": [self._article_to_candidate_item(a) for a in group_articles[:10]],
+                    "count": len(group_articles),
+                    "_score": score,
+                }
+            )
+
+        return candidates
+
     def find_moc_candidates(
-        self, min_articles: int = 3, max_articles: int = 20
+        self,
+        min_articles: int = 3,
+        top_n: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         MOC（Map of Contents）候補を抽出する
@@ -170,7 +309,7 @@ class AnalysisService:
 
         Args:
             min_articles: 最小記事数（この数未満のグループは除外）
-            max_articles: 最大記事数（この数を超えるグループは除外）
+            top_n: 返却する候補件数（Noneの場合は設定値を使用）
 
         Returns:
             List[Dict[str, Any]]: MOC候補のリスト（各要素は {category, articles, count} を含む）
@@ -182,21 +321,37 @@ class AnalysisService:
             if not articles:
                 return []
 
+            candidate_limit = top_n if top_n is not None else self.settings.moc_candidate_top_n
+            candidate_limit = max(1, candidate_limit)
+
+            filtered_articles = [
+                article
+                for article in articles
+                if not self._matches_excluded_path(str(article.get("file_path", "")))
+                and not self._matches_excluded_title(str(article.get("title", "")))
+            ]
+
+            if not filtered_articles:
+                return []
+
             # タグでグループ化
             tag_groups: dict[str, list[dict[str, Any]]] = {}
-            for article in articles:
+            for article in filtered_articles:
                 tags = article.get("tags", [])
                 if not tags:
                     continue
 
                 for tag in tags:
-                    if tag not in tag_groups:
-                        tag_groups[tag] = []
-                    tag_groups[tag].append(article)
+                    normalized_tag = str(tag).strip()
+                    if self._is_excluded_tag(normalized_tag):
+                        continue
+                    if normalized_tag not in tag_groups:
+                        tag_groups[normalized_tag] = []
+                    tag_groups[normalized_tag].append(article)
 
             # カテゴリ（フォルダ）でグループ化
             category_groups: dict[str, list[dict[str, Any]]] = {}
-            for article in articles:
+            for article in filtered_articles:
                 file_path = article.get("file_path", "")
                 category = self._get_category_from_path(file_path)
                 if not category:
@@ -205,52 +360,29 @@ class AnalysisService:
                     category_groups[category] = []
                 category_groups[category].append(article)
 
-            # MOC候補を構築
-            candidates: list[dict[str, Any]] = []
+            candidates = self._build_candidates_from_groups(
+                "tag", tag_groups, min_articles
+            ) + self._build_candidates_from_groups("category", category_groups, min_articles)
 
-            # タグベースの候補
-            for tag, group_articles in tag_groups.items():
-                if min_articles <= len(group_articles) <= max_articles:
-                    candidates.append(
-                        {
-                            "type": "tag",
-                            "name": tag,
-                            "articles": [
-                                {
-                                    "id": a["id"],
-                                    "title": a["title"],
-                                    "file_path": a["file_path"],
-                                }
-                                for a in group_articles[:10]  # 最大10件まで表示
-                            ],
-                            "count": len(group_articles),
-                        }
-                    )
+            candidates.sort(
+                key=lambda x: (
+                    float(x.get("_score", 0.0)),
+                    int(x["count"]),
+                ),
+                reverse=True,
+            )
 
-            # カテゴリベースの候補
-            for category, group_articles in category_groups.items():
-                if min_articles <= len(group_articles) <= max_articles:
-                    candidates.append(
-                        {
-                            "type": "category",
-                            "name": category,
-                            "articles": [
-                                {
-                                    "id": a["id"],
-                                    "title": a["title"],
-                                    "file_path": a["file_path"],
-                                }
-                                for a in group_articles[:10]  # 最大10件まで表示
-                            ],
-                            "count": len(group_articles),
-                        }
-                    )
+            limited_candidates = candidates[:candidate_limit]
+            for candidate in limited_candidates:
+                candidate.pop("_score", None)
 
-            # 記事数の降順でソート
-            candidates.sort(key=lambda x: x["count"], reverse=True)
-
-            logger.info(f"MOC候補: {len(candidates)}件を抽出")
-            return candidates
+            logger.info(
+                "MOC候補: %d件を抽出（フィルタ後記事数: %d件, top_n: %d）",
+                len(limited_candidates),
+                len(filtered_articles),
+                candidate_limit,
+            )
+            return limited_candidates
 
         except Exception as exc:
             logger.error(f"MOC候補の抽出に失敗しました: {exc}")
@@ -321,7 +453,7 @@ class AnalysisService:
 
                 # まだ足りない場合は、残りのカテゴリからランダムに選択
                 remaining_articles: list[dict[str, Any]] = []
-                for category, group_articles in category_groups.items():
+                for _category, group_articles in category_groups.items():
                     for article in group_articles:
                         # 既に選択された記事は除外
                         if not any(p["id"] == article["id"] for p in pickups):

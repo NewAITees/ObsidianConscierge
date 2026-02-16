@@ -14,9 +14,11 @@ class TestLLMService:
     def test_generate_summary_success(self, mock_ollama: MagicMock) -> None:
         """サマリー生成の成功テスト"""
         # Arrange
-        mock_ollama.generate.return_value = {
+        mock_client = MagicMock()
+        mock_client.generate.return_value = {
             "response": "これは記事の要約です。重要なポイントが含まれています。"
         }
+        mock_ollama.Client.return_value = mock_client
 
         service = LLMService(base_url="http://localhost:11434", model="llama3")
 
@@ -25,17 +27,19 @@ class TestLLMService:
 
         # Assert
         assert summary == "これは記事の要約です。重要なポイントが含まれています。"
-        mock_ollama.generate.assert_called_once()
+        mock_client.generate.assert_called_once()
 
     @patch("app.services.llm_service.ollama")
     def test_generate_summary_with_retry(self, mock_ollama: MagicMock) -> None:
         """リトライロジックのテスト"""
         # Arrange: 最初の2回はエラー、3回目で成功
-        mock_ollama.generate.side_effect = [
+        mock_client = MagicMock()
+        mock_client.generate.side_effect = [
             Exception("Connection error"),
             Exception("Timeout error"),
             {"response": "サマリー"},
         ]
+        mock_ollama.Client.return_value = mock_client
 
         service = LLMService(base_url="http://localhost:11434", model="llama3")
 
@@ -44,13 +48,15 @@ class TestLLMService:
 
         # Assert
         assert summary == "サマリー"
-        assert mock_ollama.generate.call_count == 3
+        assert mock_client.generate.call_count == 3
 
     @patch("app.services.llm_service.ollama")
     def test_generate_summary_max_retries_exceeded(self, mock_ollama: MagicMock) -> None:
         """最大リトライ回数を超えた場合のテスト"""
         # Arrange: 常にエラーを返す
-        mock_ollama.generate.side_effect = Exception("Connection error")
+        mock_client = MagicMock()
+        mock_client.generate.side_effect = Exception("Connection error")
+        mock_ollama.Client.return_value = mock_client
 
         service = LLMService(base_url="http://localhost:11434", model="llama3")
 
@@ -62,7 +68,9 @@ class TestLLMService:
     def test_generate_tags_success(self, mock_ollama: MagicMock) -> None:
         """タグ生成の成功テスト"""
         # Arrange
-        mock_ollama.generate.return_value = {"response": "python, testing, automation"}
+        mock_client = MagicMock()
+        mock_client.generate.return_value = {"response": "python, testing, automation"}
+        mock_ollama.Client.return_value = mock_client
 
         service = LLMService(base_url="http://localhost:11434", model="llama3")
 
@@ -73,15 +81,15 @@ class TestLLMService:
         assert isinstance(tags, list)
         assert len(tags) > 0
         assert "python" in tags or "testing" in tags or "automation" in tags
-        mock_ollama.generate.assert_called_once()
+        mock_client.generate.assert_called_once()
 
     @patch("app.services.llm_service.ollama")
     def test_generate_tags_with_existing_tags(self, mock_ollama: MagicMock) -> None:
         """既存タグがある場合のタグ生成テスト"""
         # Arrange
-        mock_response = MagicMock()
-        mock_response["response"] = "python, testing"
-        mock_ollama.generate.return_value = mock_response
+        mock_client = MagicMock()
+        mock_client.generate.return_value = {"response": "python, testing"}
+        mock_ollama.Client.return_value = mock_client
 
         service = LLMService(base_url="http://localhost:11434", model="llama3")
 
