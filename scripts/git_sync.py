@@ -3,7 +3,9 @@
 import logging
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -23,6 +25,35 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _normalize_extensions(extensions: list[str]) -> set[str]:
+    """拡張子リストを正規化する（小文字・ドット付き）."""
+    normalized: set[str] = set()
+    for ext in extensions:
+        value = ext.strip().lower()
+        if not value:
+            continue
+        if not value.startswith("."):
+            value = f".{value}"
+        normalized.add(value)
+    return normalized
+
+
+def _stage_safe_changes(repo: Any, allowed_extensions: list[str]) -> int:
+    """自動コミット対象として安全な変更のみステージングする."""
+    # 既存の追跡済みファイルの変更（更新・削除）をステージング
+    repo.git.add("--update")
+
+    # 新規ファイルは許可拡張子のみステージング
+    allowed = _normalize_extensions(allowed_extensions)
+    staged_untracked = 0
+    for untracked_path in repo.untracked_files:
+        if Path(untracked_path).suffix.lower() in allowed:
+            repo.git.add("--", untracked_path)
+            staged_untracked += 1
+
+    return staged_untracked
 
 
 @click.command()
@@ -47,6 +78,7 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
         uv run python scripts/git_sync.py --use-sh-script
     """
     embedding_service = None
+    llm_service = None
 
     try:
         # 設定を読み込む
@@ -88,6 +120,57 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
                 origin = repo.remotes.origin
                 origin.pull()
                 logger.info("Git pull完了")
+
+                unmerged_blobs = repo.index.unmerged_blobs()
+                if unmerged_blobs:
+                    logger.error(
+                        "Git pull後にマージコンフリクトを検出しました。自動コミット・プッシュをスキップします。"
+                    )
+                elif settings.git_auto_push_enabled:
+                    # ローカル変更を自動コミット・プッシュ
+                    if repo.is_dirty(untracked_files=True):
+                        logger.info(
+                            "ローカル変更を検出しました。自動コミット・プッシュを実行中..."
+                        )
+                        try:
+                            staged_untracked = _stage_safe_changes(
+                                repo,
+                                settings.git_auto_push_allowed_extensions,
+                            )
+                            logger.info(
+                                "安全な変更をステージングしました（新規許可ファイル: %d件, 拡張子: %s）",
+                                staged_untracked,
+                                settings.git_auto_push_allowed_extensions,
+                            )
+
+                            has_staged_changes = repo.is_dirty(
+                                index=True,
+                                working_tree=False,
+                                untracked_files=False,
+                            )
+                            if not has_staged_changes:
+                                logger.info(
+                                    "自動コミット対象の変更はありません（許可拡張子以外は除外）"
+                                )
+                            else:
+                                commit_message = (
+                                    "Auto-sync: "
+                                    f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                                )
+                                repo.index.commit(commit_message)
+                                logger.info(f"コミット完了: {commit_message}")
+
+                                origin.push()
+                                logger.info("Git push完了")
+                        except Exception as exc:
+                            logger.error(f"自動コミット・プッシュに失敗しました: {exc}")
+                            # プッシュ失敗してもインデックス更新は継続
+                    else:
+                        logger.info("ローカル変更はありません")
+                else:
+                    logger.info(
+                        "GIT_AUTO_PUSH_ENABLED=false のため自動コミット・プッシュはスキップします"
+                    )
             except Exception as exc:
                 logger.error(f"Git pullに失敗しました: {exc}")
                 sys.exit(1)
@@ -120,9 +203,10 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
         logger.info("サービスを初期化中...")
         vector_db_service = VectorDBService(db_path=settings.get_chroma_db_path())
         embedding_service = EmbeddingService()  # GPUロードは embed() 呼び出し時に遅延実行
-        llm_service = LLMService(
+        llm_service = LLMService(  # Ollama接続（httpx）
             base_url=settings.ollama_base_url,
             model=settings.ollama_llm_model,
+            keep_alive=settings.ollama_keep_alive,
         )
 
         indexing_service = IndexingService(
@@ -172,13 +256,15 @@ def main(pull_only: bool, use_sh_script: bool) -> None:
         logger.error(f"エラーが発生しました: {exc}", exc_info=True)
         sys.exit(1)
     finally:
-        # 必ずGPUリソースを解放
+        # 必ずリソースを解放
         if embedding_service is not None:
-            logger.info("GPUリソースをクリーンアップ中...")
+            logger.info("EmbeddingService をクリーンアップ中...")
             embedding_service.cleanup()
-            logger.info("クリーンアップ完了")
+        if llm_service is not None:
+            logger.info("LLMService をクリーンアップ中...")
+            llm_service.cleanup()
+        logger.info("クリーンアップ完了")
 
 
 if __name__ == "__main__":
     main()
-

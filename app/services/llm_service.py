@@ -15,6 +15,7 @@ class LLMService:
         model: str = "llama3",
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        keep_alive: int = 60,
     ) -> None:
         """
         LLMServiceを初期化
@@ -24,11 +25,13 @@ class LLMService:
             model: 使用するLLMモデル名
             max_retries: 最大リトライ回数
             retry_delay: リトライ間の待機時間（秒）
+            keep_alive: モデルのGPU保持時間（秒）。0=即座にアンロード、-1=常駐
         """
         self.base_url = base_url
         self.model = model
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.keep_alive = keep_alive
         self._client = ollama.Client(host=self.base_url)
 
     def generate_summary(self, content: str, max_length: int = 200) -> str:
@@ -114,6 +117,7 @@ class LLMService:
                 response = self._client.generate(
                     model=self.model,
                     prompt=prompt,
+                    keep_alive=self.keep_alive,
                 )
                 return response["response"]
             except Exception as e:
@@ -127,3 +131,34 @@ class LLMService:
         if last_error:
             raise last_error
         raise RuntimeError("Unexpected error in _generate_with_retry")
+
+    def close(self) -> None:
+        """
+        Ollamaクライアントの接続をクローズする
+
+        httpx の接続プールを明示的にクローズし、リソースを解放します。
+        """
+        if hasattr(self._client, "_client") and hasattr(
+            self._client._client, "close"
+        ):
+            self._client._client.close()
+
+    def cleanup(self) -> None:
+        """
+        リソースのクリーンアップ（close の別名）
+
+        EmbeddingService との一貫性のため、cleanup メソッドも提供します。
+        """
+        self.close()
+
+    def __del__(self) -> None:
+        """
+        デストラクタ
+
+        オブジェクト破棄時に念のため接続をクローズします。
+        """
+        try:
+            self.close()
+        except Exception:
+            # デストラクタでは例外を無視
+            pass

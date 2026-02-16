@@ -192,6 +192,9 @@ class IndexingService:
             elif not isinstance(existing_tags, list):
                 existing_tags = []
 
+            # リスト内の全要素を文字列に変換（datetime.date等のオブジェクト対策）
+            existing_tags = [str(tag) for tag in existing_tags]
+
             tags = (
                 self.llm_service.generate_tags(content.body, existing_tags=existing_tags)
                 if self.settings.enable_auto_tagging

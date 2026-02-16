@@ -33,6 +33,7 @@ def get_llm_service() -> LLMService:
     return LLMService(
         base_url=settings.ollama_base_url,
         model=settings.ollama_llm_model,
+        keep_alive=settings.ollama_keep_alive,
     )
 
 

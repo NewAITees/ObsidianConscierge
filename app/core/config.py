@@ -40,6 +40,11 @@ class Settings(BaseSettings):
         default="gpt-oss:20b",
         description="Ollama LLMモデル名（gpt-oss:20b, llama3.1:8b, qwen3:14b等）",
     )
+    ollama_keep_alive: int = Field(
+        default=60,
+        ge=-1,
+        description="Ollama モデルのGPU保持時間（秒）。0=即座にアンロード、-1=常駐",
+    )
 
     # ベクトルDB設定
     chroma_db_path: Path = Field(
@@ -103,6 +108,14 @@ class Settings(BaseSettings):
         default=30,
         ge=1,
         description="Git同期間隔（分）",
+    )
+    git_auto_push_enabled: bool = Field(
+        default=False,
+        description="Git同期時の自動コミット・プッシュの有効/無効",
+    )
+    git_auto_push_allowed_extensions: list[str] = Field(
+        default_factory=lambda: [".md"],
+        description="自動コミット時に許可する新規ファイル拡張子（例: .md,.canvas）",
     )
 
     # ドキュメント自動編集設定
@@ -220,5 +233,3 @@ def get_settings() -> Settings:
     if settings is None:
         settings = Settings()
     return settings
-
-
